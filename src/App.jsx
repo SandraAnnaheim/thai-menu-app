@@ -127,8 +127,8 @@ function AppRouter() {
 
   if (loading) return <><GlobalStyles /><LoadingScreen /></>;
   if (!user) return <><GlobalStyles /><LoginPage /></>;
-  if (!profile?.is_approved) return <><GlobalStyles /><PendingApprovalPage /></>;
 if (profile?.is_admin) return <><GlobalStyles /><AdminLayout page={page} setPage={setPage} /></>;
+if (!profile?.is_approved) return <><GlobalStyles /><PendingApprovalPage /></>;
 if (profile?.is_contact && !profile?.is_admin) return <><GlobalStyles /><ContactLayout page={page} setPage={setPage} /></>;
 return <><GlobalStyles /><UserLayout page={page} setPage={setPage} /></>;
 }
