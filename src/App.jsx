@@ -260,10 +260,10 @@ function LoginPage() {
                 <input style={styles.input} type={showPassword ? "text" : "password"} value={passwordConfirm} onChange={e => setPasswordConfirm(e.target.value)} required />
               </div>
               {passwordConfirm && password !== passwordConfirm && (
-                <span style={{ color: "#dc2626", fontSize: 12 }}>⚠️ Passwörter stimmen nicht überein</span>
+                <span style={{ color: "#dc2626", fontSize: 12 }}>Passwörter stimmen nicht überein</span>
               )}
               {passwordConfirm && password === passwordConfirm && (
-                <span style={{ color: "#15803d", fontSize: 12 }}>✅ Passwörter stimmen überein</span>
+                <span style={{ color: "#15803d", fontSize: 12 }}>Passwörter stimmen überein</span>
               )}
             </div>
             <div style={styles.inputGroup}>
@@ -291,7 +291,7 @@ function PendingApprovalPage() {
     <div style={styles.loginBg}>
       <div style={styles.loginCard}>
         <div style={{ textAlign: "center", padding: "40px 20px" }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>⏳</div>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>Ausstehend</div>
           <h2 style={{ color: "#b45309", marginBottom: 8 }}>Konto wird geprüft</h2>
           <p style={{ color: "#6b7280" }}>Dein Konto wurde noch nicht freigeschaltet. Der Administrator wird dich bald freischalten.</p>
           <button style={{ ...styles.btnSecondary, marginTop: 24 }} onClick={() => supabase.auth.signOut()}>Abmelden</button>
@@ -541,7 +541,7 @@ function OrderPage({ setPage }) {
 
       {!weeklyMenu ? (
         <div style={styles.emptyState}>
-          <div style={{ fontSize: 48 }}>🍽️</div>
+          <div style={{ fontSize: 48 }}></div>
           <p>Für diese Woche wurde noch kein Menü erfasst.</p>
         </div>
       ) : existingOrder ? (
@@ -692,7 +692,7 @@ function ExistingOrderCard({ order, weeklyMenu, twintInfo, setPage, onNewOrder }
         {order.protein_choice && <div style={styles.orderRow}><span>Protein</span><strong>{order.protein_choice}</strong></div>}
         <div style={styles.orderRow}><span>Lunchbox</span><strong>{order.lunchbox_requested ? "Ja" : "Nein"}</strong></div>
         <div style={styles.orderRow}><span>Preis</span><strong>CHF {order.total_price?.toFixed(2)}</strong></div>
-        <div style={styles.orderRow}><span>Bezahlt</span><strong>{order.payment_status === "paid" ? "✅ Ja" : "Ausstehend"}</strong></div>
+        <div style={styles.orderRow}><span>Bezahlt</span><strong>{order.payment_status === "paid" ? "Ja" : "Ausstehend"}</strong></div>
       </div>
       {twintInfo && order.payment_status !== "paid" && (
         <TwintPayment twintInfo={twintInfo} weekNumber={weeklyMenu?.week_number} />
@@ -803,7 +803,7 @@ function OrderHistory() {
                   {isEditing ? (
                     <input type="checkbox" checked={editOrder.is_vegetarian}
                       onChange={e => setEditOrder({ ...editOrder, is_vegetarian: e.target.checked })} />
-                  ) : <span>{o.is_vegetarian ? "✅ Ja" : "—"}</span>}
+                  ) : <span>{o.is_vegetarian ? "Ja" : "—"}</span>}
                 </div>
 
                 <div style={styles.mobileCardRow}>
@@ -811,7 +811,7 @@ function OrderHistory() {
                   {isEditing ? (
                     <input type="checkbox" checked={editOrder.lunchbox_requested}
                       onChange={e => setEditOrder({ ...editOrder, lunchbox_requested: e.target.checked })} />
-                  ) : <span>{o.lunchbox_requested ? "✅ Ja" : "—"}</span>}
+                  ) : <span>{o.lunchbox_requested ? "Ja" : "—"}</span>}
                 </div>
 
                 <div style={styles.mobileCardRow}>
@@ -822,7 +822,7 @@ function OrderHistory() {
                 <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
                   <span style={styles.mobileCardLabel}>Bezahlt</span>
                   <span style={{ fontWeight: 600, color: o.payment_status === "paid" ? "#15803d" : "#92400e" }}>
-                    {o.payment_status === "paid" ? "✅ Bezahlt" : "⏳ Ausstehend"}
+                    {o.payment_status === "paid" ? "Bezahlt" : "Ausstehend"}
                   </span>
                 </div>
 
@@ -830,16 +830,16 @@ function OrderHistory() {
                 <div style={styles.mobileCardActions}>
                   {canEdit && !isEditing && (
                     <>
-                      <button style={styles.btnSmall} onClick={() => setEditOrder({ ...o })}>✏️ Bearbeiten</button>
+                      <button style={styles.btnSmall} onClick={() => setEditOrder({ ...o })}>Bearbeiten</button>
                       <button style={{ ...styles.btnSmallRed, opacity: deleting === o.id ? 0.5 : 1 }}
-                        onClick={() => handleDelete(o)}>🗑️ Löschen</button>
+                        onClick={() => handleDelete(o)}>Löschen</button>
                     </>
                   )}
                   {isEditing && (
                     <>
                       <button style={styles.btnSmallGreen}
                         onClick={() => handleSave(o, { menu_choice: editOrder.menu_choice, is_vegetarian: editOrder.is_vegetarian, lunchbox_requested: editOrder.lunchbox_requested })}>
-                        ✅ Speichern
+                        Speichern
                       </button>
                       <button style={styles.btnSmall} onClick={() => setEditOrder(null)}>✕ Abbrechen</button>
                     </>
@@ -1034,7 +1034,7 @@ function ContactOrders() {
                       <div style={styles.mobileCardRow}>
                         <span style={styles.mobileCardLabel}>Lunchbox ↩</span>
                         <span style={{ color: o.lunchbox_returned ? "#15803d" : o.lunchbox_requested ? "#92400e" : "#6b7280" }}>
-                          {o.lunchbox_returned ? "✅ Zurück" : o.lunchbox_requested ? "⏳ Ausstehend" : "—"}
+                          {o.lunchbox_returned ? "Zurück" : o.lunchbox_requested ? "Ausstehend" : "—"}
                         </span>
                       </div>
                       <div style={styles.mobileCardRow}>
@@ -1044,7 +1044,7 @@ function ContactOrders() {
                       <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
                         <span style={styles.mobileCardLabel}>Bezahlt</span>
                         <span style={{ fontWeight: 600, color: o.payment_status === "paid" ? "#15803d" : "#92400e" }}>
-                          {o.payment_status === "paid" ? "✅ Bezahlt" : "⏳ Ausstehend"}
+                          {o.payment_status === "paid" ? "Bezahlt" : "Ausstehend"}
                         </span>
                       </div>
                       <div style={styles.mobileCardActions}>
@@ -1197,7 +1197,7 @@ function AdminOrders() {
     <div style={styles.pageContainer}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <h1 style={styles.pageTitle}>Bestellungen</h1>
-        <button style={styles.btnPrimary} onClick={exportPDF}>📄 PDF</button>
+        <button style={styles.btnPrimary} onClick={exportPDF}>PDF</button>
       </div>
 
       {/* Filter */}
@@ -1230,7 +1230,7 @@ function AdminOrders() {
           // ── MOBILE: Cards ──
           <div>
             {orders.length === 0 && (
-              <div style={styles.emptyState}><div style={{ fontSize: 48 }}>📭</div><p>Keine Bestellungen gefunden.</p></div>
+              <div style={styles.emptyState}><div style={{ fontSize: 48 }}></div><p>Keine Bestellungen gefunden.</p></div>
             )}
             {orders.map(o => (
               <div key={o.id} style={styles.mobileCard}>
@@ -1262,7 +1262,7 @@ function AdminOrders() {
                 <div style={styles.mobileCardRow}>
                   <span style={styles.mobileCardLabel}>Lunchbox ↩</span>
                   <span style={{ color: o.lunchbox_returned ? "#15803d" : o.lunchbox_requested ? "#92400e" : "#6b7280" }}>
-                    {o.lunchbox_returned ? "✅ Zurück" : o.lunchbox_requested ? "⏳ Ausstehend" : "—"}
+                    {o.lunchbox_returned ? "Zurück" : o.lunchbox_requested ? "Ausstehend" : "—"}
                   </span>
                 </div>
                 <div style={styles.mobileCardRow}>
@@ -1272,15 +1272,15 @@ function AdminOrders() {
                 <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
                   <span style={styles.mobileCardLabel}>Bezahlt</span>
                   <span style={{ fontWeight: 600, color: o.payment_status === "paid" ? "#15803d" : "#92400e" }}>
-                    {o.payment_status === "paid" ? "✅ Bezahlt" : "⏳ Ausstehend"}
+                    {o.payment_status === "paid" ? "Bezahlt" : "Ausstehend"}
                   </span>
                 </div>
                 <div style={styles.mobileCardActions}>
                   {o.payment_status !== "paid" && (
-                    <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>✅ Bezahlt</button>
+                    <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>Bezahlt</button>
                   )}
                   {o.lunchbox_requested && !o.lunchbox_returned && (
-                    <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>📦 Lunchbox zurück</button>
+                    <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>Lunchbox zurück</button>
                   )}
                 </div>
               </div>
@@ -1406,7 +1406,7 @@ function AdminUsers() {
                 <div style={styles.mobileCardActions}>
                   <button style={u.is_approved ? styles.btnSmallGreen : styles.btnSmallRed}
                     onClick={() => toggleApproval(u.id, u.is_approved)}>
-                    {u.is_approved ? "✅ Freigegeben" : "❌ Gesperrt"}
+                    {u.is_approved ? "Freigegeben" : "Gesperrt"}
                   </button>
                   <button style={u.is_admin ? styles.btnSmallGreen : styles.btnSmall}
                     onClick={() => toggleAdmin(u.id, u.is_admin)}>
@@ -1439,7 +1439,7 @@ function AdminUsers() {
                   <td style={styles.td}>
                     <button style={u.is_approved ? styles.btnSmallGreen : styles.btnSmallRed}
                       onClick={() => toggleApproval(u.id, u.is_approved)}>
-                      {u.is_approved ? "✅ Ja" : "❌ Nein"}
+                      {u.is_approved ? "Ja" : "Nein"}
                     </button>
                   </td>
                   <td style={styles.td}>
@@ -1548,7 +1548,7 @@ function AdminMenus() {
                 {m.image_url
                   ? <img src={m.image_url} alt={m.title} style={{ width: 64, height: 64, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
                   : <div style={{ width: 64, height: 64, borderRadius: 8, background: "#f5f5f4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <span style={{ fontSize: 24 }}>🍽️</span>
+                    <span style={{ fontSize: 24 }}></span>
                   </div>
                 }
                 <div style={{ flex: 1 }}>
@@ -1564,7 +1564,7 @@ function AdminMenus() {
               )}
               <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
                 <span style={styles.mobileCardLabel}>Vegetarisch möglich</span>
-                <span>{m.is_vegetarian_possible ? "✅ Ja" : "—"}</span>
+                <span>{m.is_vegetarian_possible ? "Ja" : "—"}</span>
               </div>
               <div style={styles.mobileCardActions}>
                 <label style={{ ...styles.btnSmall, cursor: "pointer" }}>
