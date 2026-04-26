@@ -4,7 +4,7 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 
 // ============================================
-// SUPABASE CONFIG - HIER DEINE WERTE EINTRAGEN
+// SUPABASE CONFIG
 // ============================================
 const SUPABASE_URL = "https://hsyhvwfweknzbywwqpwa.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzeWh2d2Z3ZWtuemJ5d3dxcHdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTUwMjYsImV4cCI6MjA5MjAzMTAyNn0.OwEtxFWkxwpsLblCE-zRF8wfQO-Ndq1H04WhFiLkZTs";
@@ -36,9 +36,27 @@ function AuthProvider({ children }) {
   }, []);
 
   async function fetchProfile(userId) {
-    const { data } = await supabase.from("profiles").select("*, companies(*)").eq("id", userId).single();
-    setProfile(data);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+      if (data?.company_id) {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("*")
+          .eq("id", data.company_id)
+          .single();
+        setProfile({ ...data, companies: company });
+      } else {
+        setProfile(data);
+      }
+    } catch (error) {
+      console.error("fetchProfile Fehler:", error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -49,7 +67,7 @@ function AuthProvider({ children }) {
 }
 
 // ============================================
-// UTILITY: Aktuelle Kalenderwoche
+// UTILITY
 // ============================================
 function getWeekNumber(date = new Date()) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -65,7 +83,7 @@ function isOrderingOpen(deadline) {
 
 function getOrderingWeek() {
   const today = new Date();
-  const dayOfWeek = today.getDay(); // 0=So, 1=Mo, 2=Di, 3=Mi, 4=Do, 5=Fr, 6=Sa
+  const dayOfWeek = today.getDay();
   if (dayOfWeek >= 3) {
     const nextWeek = new Date(today);
     nextWeek.setDate(today.getDate() + 7);
@@ -96,6 +114,7 @@ function GlobalStyles() {
       * { box-sizing: border-box; }
       html { -webkit-text-size-adjust: 100%; }
       input, select, button, textarea { font-size: 16px !important; }
+      body { margin: 0; }
       @media (max-width: 767px) {
         .menu-grid { grid-template-columns: 1fr !important; }
         .admin-form-grid { grid-template-columns: 1fr !important; }
@@ -105,7 +124,10 @@ function GlobalStyles() {
         .filter-row input, .filter-row select { width: 100% !important; }
         .mobile-stack { flex-direction: column; }
         .add-menu-form { flex-direction: column !important; }
+        .filter-number-row { display: flex; gap: 12px; }
+        .filter-number-row input { flex: 1; }
       }
+      @keyframes spin { to { transform: rotate(360deg); } }
     `}</style>
   );
 }
@@ -127,13 +149,11 @@ function AppRouter() {
 
   if (loading) return <><GlobalStyles /><LoadingScreen /></>;
   if (!user) return <><GlobalStyles /><LoginPage /></>;
-
-if (!profile) return <><GlobalStyles /><LoadingScreen /></>;
-
-if (profile?.is_admin) return <><GlobalStyles /><AdminLayout page={page} setPage={setPage} /></>;
-if (!profile?.is_approved) return <><GlobalStyles /><PendingApprovalPage /></>;
-if (profile?.is_contact && !profile?.is_admin) return <><GlobalStyles /><ContactLayout page={page} setPage={setPage} /></>;
-return <><GlobalStyles /><UserLayout page={page} setPage={setPage} /></>;
+  if (!profile) return <><GlobalStyles /><LoadingScreen /></>;
+  if (profile?.is_admin) return <><GlobalStyles /><AdminLayout page={page} setPage={setPage} /></>;
+  if (!profile?.is_approved) return <><GlobalStyles /><PendingApprovalPage /></>;
+  if (profile?.is_contact && !profile?.is_admin) return <><GlobalStyles /><ContactLayout page={page} setPage={setPage} /></>;
+  return <><GlobalStyles /><UserLayout page={page} setPage={setPage} /></>;
 }
 
 // ============================================
@@ -158,10 +178,10 @@ function LoginPage() {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-const [name, setName] = useState("");
-const [company, setCompany] = useState("");
-const [passwordConfirm, setPasswordConfirm] = useState("");
-const [showPassword, setShowPassword] = useState(false);
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [companies, setCompanies] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -182,17 +202,15 @@ const [showPassword, setShowPassword] = useState(false);
   async function handleRegister(e) {
     e.preventDefault();
     setError(""); setLoading(true);
-if (!company) { setError("Bitte Firma auswählen."); setLoading(false); return; }
-if (password !== passwordConfirm) { setError("Passwörter stimmen nicht überein."); setLoading(false); return; }
+    if (!company) { setError("Bitte Firma auswählen."); setLoading(false); return; }
+    if (password !== passwordConfirm) { setError("Passwörter stimmen nicht überein."); setLoading(false); return; }
     const { data, error } = await supabase.auth.signUp({
       email, password,
       options: { data: { full_name: name } }
     });
     if (error) { setError(error.message); setLoading(false); return; }
-if (data.user) {
+    if (data.user) {
       await supabase.from("profiles").update({ company_id: company, full_name: name }).eq("id", data.user.id);
-      
-      // Admin benachrichtigen
       await supabase.functions.invoke('resend-email', {
         body: { full_name: name, email: email }
       });
@@ -227,27 +245,28 @@ if (data.user) {
           <form onSubmit={handleRegister} style={styles.form}>
             <Input label="Vollständiger Name" value={name} onChange={e => setName(e.target.value)} required />
             <Input label="E-Mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-<div style={styles.inputGroup}>
-  <label style={styles.label}>Passwort (min. 6 Zeichen)</label>
-  <div style={{ position: "relative" }}>
-    <input style={styles.input} type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required />
-    <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 12 }}>
-      {showPassword ? <em>Passwort verbergen</em> : <em>Passwort anzeigen</em>}
-    </button>
-  </div>
-</div>
-<div style={styles.inputGroup}>
-  <label style={styles.label}>Passwort bestätigen</label>
-  <div style={{ position: "relative" }}>
-    <input style={styles.input} type={showPassword ? "text" : "password"} value={passwordConfirm} onChange={e => setPasswordConfirm(e.target.value)} required />
-  </div>
-  {passwordConfirm && password !== passwordConfirm && (
-    <span style={{ color: "#dc2626", fontSize: 12 }}>⚠️ Passwörter stimmen nicht überein</span>
-  )}
-  {passwordConfirm && password === passwordConfirm && (
-    <span style={{ color: "#15803d", fontSize: 12 }}>✅ Passwörter stimmen überein</span>
-  )}
-</div>            <div style={styles.inputGroup}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Passwort (min. 6 Zeichen)</label>
+              <div style={{ position: "relative" }}>
+                <input style={styles.input} type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 12 }}>
+                  {showPassword ? <em>Verbergen</em> : <em>Anzeigen</em>}
+                </button>
+              </div>
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Passwort bestätigen</label>
+              <div style={{ position: "relative" }}>
+                <input style={styles.input} type={showPassword ? "text" : "password"} value={passwordConfirm} onChange={e => setPasswordConfirm(e.target.value)} required />
+              </div>
+              {passwordConfirm && password !== passwordConfirm && (
+                <span style={{ color: "#dc2626", fontSize: 12 }}>⚠️ Passwörter stimmen nicht überein</span>
+              )}
+              {passwordConfirm && password === passwordConfirm && (
+                <span style={{ color: "#15803d", fontSize: 12 }}>✅ Passwörter stimmen überein</span>
+              )}
+            </div>
+            <div style={styles.inputGroup}>
               <label style={styles.label}>Firma *</label>
               <select style={styles.select} value={company} onChange={e => setCompany(e.target.value)} required>
                 <option value="">Firma auswählen…</option>
@@ -294,7 +313,7 @@ function UserLayout({ page, setPage }) {
   return (
     <div style={styles.appContainer}>
       <nav style={styles.nav}>
-        <div style={styles.navBrand}><span>Thai Menü</span></div>
+        <div style={styles.navBrand}><span>{profile?.companies?.name || "Thai Menü"}</span></div>
         {isMobile ? (
           <>
             <div style={{ flex: 1 }} />
@@ -330,7 +349,7 @@ function UserLayout({ page, setPage }) {
 }
 
 // ============================================
-// ADMIN LAYOUT
+// CONTACT LAYOUT
 // ============================================
 function ContactLayout({ page, setPage }) {
   const { supabase, profile } = useAuth();
@@ -372,18 +391,23 @@ function ContactLayout({ page, setPage }) {
     </div>
   );
 }
+
+// ============================================
+// ADMIN LAYOUT
+// ============================================
 function AdminLayout({ page, setPage }) {
   const { supabase } = useAuth();
   const isMobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = useState(false);
-const navItems = [["orders", "Bestellungen"], ["bestellen", "Bestellen"], ["weekly", "Wochenmenüs"], ["menus", "Menü-Pool"], ["users", "Benutzer"]];
-const adminPages = {
-  orders: <AdminOrders />,
-  bestellen: <OrderPage setPage={setPage} />,
-  users: <AdminUsers />,
-  menus: <AdminMenus />,
-  weekly: <AdminWeeklyMenus />,
-};
+  const navItems = [["orders", "Bestellungen"], ["bestellen", "Bestellen"], ["history", "Meine Bestellungen"], ["weekly", "Wochenmenüs"], ["menus", "Menü-Pool"], ["users", "Benutzer"]];
+  const adminPages = {
+    orders: <AdminOrders />,
+    bestellen: <OrderPage setPage={setPage} />,
+    history: <OrderHistory />,
+    users: <AdminUsers />,
+    menus: <AdminMenus />,
+    weekly: <AdminWeeklyMenus />,
+  };
   return (
     <div style={styles.appContainer}>
       <nav style={{ ...styles.nav, background: "#1c1917" }}>
@@ -419,10 +443,11 @@ const adminPages = {
 }
 
 // ============================================
-// ORDER PAGE (Benutzer bestellt)
+// ORDER PAGE
 // ============================================
 function OrderPage({ setPage }) {
   const { profile, supabase } = useAuth();
+  const isMobile = useIsMobile();
   const [weeklyMenu, setWeeklyMenu] = useState(null);
   const [loading, setLoading] = useState(true);
   const [menuChoice, setMenuChoice] = useState(null);
@@ -432,42 +457,32 @@ function OrderPage({ setPage }) {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
-  const [existingOrder, setExistingOrder] = useState(null);
   const [twintInfo, setTwintInfo] = useState(null);
-const open = isOrderingOpen(weeklyMenu?.order_deadline);
-const { week, year } = getOrderingWeek();
+  const [existingOrder, setExistingOrder] = useState(null);
+  const open = isOrderingOpen(weeklyMenu?.order_deadline);
+  const { week, year } = getOrderingWeek();
 
-  useEffect(() => {
-    loadWeeklyMenu();
-  }, []);
+  useEffect(() => { loadWeeklyMenu(); }, []);
 
   async function loadWeeklyMenu() {
-const { data } = await supabase
+    const { data } = await supabase
       .from("weekly_menus")
       .select("*, menu1:menu1_id(*), menu2:menu2_id(*)")
       .eq("week_number", week).eq("year", year).eq("is_active", true).single();
     setWeeklyMenu(data);
 
     if (data && profile) {
-const { data: order } = await supabase
+      const { data: order } = await supabase
         .from("orders")
         .select("*").eq("weekly_menu_id", data.id).eq("user_id", profile.id).single();
       setExistingOrder(order);
-      
-const { data: profileWithCompany } = await supabase
+
+      const { data: profileWithCompany } = await supabase
         .from("profiles")
         .select("*, companies(*)")
         .eq("id", profile.id).single();
-      
+
       if (profileWithCompany?.companies) {
-        setTwintInfo({
-          phone: profileWithCompany.companies.twint_phone,
-          contact: profileWithCompany.companies.contact_person,
-          amount: data.price_per_menu
-        });
-      }
-      
-if (profileWithCompany?.companies) {
         setTwintInfo({
           phone: profileWithCompany.companies.twint_phone,
           contact: profileWithCompany.companies.contact_person,
@@ -480,11 +495,11 @@ if (profileWithCompany?.companies) {
 
   async function handleOrder(e) {
     e.preventDefault();
-if (!menuChoice) { setError("Bitte ein Menü auswählen."); return; }
-const selectedMenu = menuChoice === 1 ? weeklyMenu.menu1 : weeklyMenu.menu2;
-const proteins = selectedMenu?.protein_options?.split(",").map(p => p.trim()).filter(p => p && p !== "keine") || [];
-if (proteins.length > 1 && !proteinChoice) { setError("Bitte eine Protein-Wahl treffen."); return; }
-const autoProtein = proteins.length === 1 ? proteins[0] : proteinChoice;
+    if (!menuChoice) { setError("Bitte ein Menü auswählen."); return; }
+    const selectedMenu = menuChoice === 1 ? weeklyMenu.menu1 : weeklyMenu.menu2;
+    const proteins = selectedMenu?.protein_options?.split(",").map(p => p.trim()).filter(p => p && p !== "keine") || [];
+    if (proteins.length > 1 && !proteinChoice) { setError("Bitte eine Protein-Wahl treffen."); return; }
+    const autoProtein = proteins.length === 1 ? proteins[0] : proteinChoice;
     setSubmitting(true); setError("");
     const { data, error: err } = await supabase.from("orders").insert({
       user_id: profile.id,
@@ -492,35 +507,35 @@ const autoProtein = proteins.length === 1 ? proteins[0] : proteinChoice;
       weekly_menu_id: weeklyMenu.id,
       menu_choice: menuChoice,
       is_vegetarian: isVegetarian,
-protein_choice: !isVegetarian ? autoProtein : null,
+      protein_choice: !isVegetarian ? autoProtein : null,
       lunchbox_requested: lunchbox,
       quantity: 1,
     }).select().single();
     if (err) { setError("Fehler beim Bestellen: " + err.message); setSubmitting(false); return; }
     setExistingOrder(data);
     setSuccess(true);
-    // Twint Deeplink
-setTwintInfo({ 
-  phone: profile?.companies?.twint_phone || "",
-  contact: profile?.companies?.contact_person || "",
-  amount: weeklyMenu.price_per_menu 
-});
+    setTwintInfo({
+      phone: profile?.companies?.twint_phone || "",
+      contact: profile?.companies?.contact_person || "",
+      amount: weeklyMenu.price_per_menu
+    });
     setSubmitting(false);
   }
 
   if (loading) return <LoadingScreen />;
-  const isMobile = window.innerWidth < 768;
 
   return (
     <div style={styles.pageContainer}>
       <div style={styles.pageHeader}>
-        <h1 style={styles.pageTitle}>Menü Bestellen</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <h1 style={styles.pageTitle}>Menü Bestellen</h1>
+        </div>
         <span style={styles.weekBadge}>KW {week}</span>
       </div>
 
       {!open && (
         <div style={styles.warningBox}>
- ⏰ Die Bestellfrist für KW {week} ist abgelaufen (Dienstag 13:00 Uhr).
+          Die Bestellfrist für KW {week} ist abgelaufen (Dienstag 13:00 Uhr).
         </div>
       )}
 
@@ -530,7 +545,7 @@ setTwintInfo({
           <p>Für diese Woche wurde noch kein Menü erfasst.</p>
         </div>
       ) : existingOrder ? (
-<ExistingOrderCard order={existingOrder} weeklyMenu={weeklyMenu} twintInfo={twintInfo} setPage={setPage} />
+        <ExistingOrderCard order={existingOrder} weeklyMenu={weeklyMenu} twintInfo={twintInfo} setPage={setPage} onNewOrder={() => { setExistingOrder(null); setMenuChoice(null); setSuccess(false); }} />
       ) : (
         <form onSubmit={handleOrder}>
           <div style={styles.menuGrid} className="menu-grid">
@@ -539,6 +554,7 @@ setTwintInfo({
               menu={weeklyMenu.menu1}
               selected={menuChoice === 1}
               onSelect={() => setMenuChoice(1)}
+              isMobile={isMobile}
             />
             <MenuCard
               number={2}
@@ -548,6 +564,7 @@ setTwintInfo({
               showProtein={!isVegetarian}
               proteinChoice={proteinChoice}
               onProteinChange={setProteinChoice}
+              isMobile={isMobile}
             />
           </div>
 
@@ -560,18 +577,18 @@ setTwintInfo({
             </div>
           )}
 
-<div style={{...styles.optionCard, border: lunchbox ? "1.5px solid #15803d" : "1.5px solid #dc2626", background: lunchbox ? "#f0fdf4" : "#fff7f7"}}>
-  <label style={styles.checkboxLabel}>
-    <input type="checkbox" checked={lunchbox} onChange={e => setLunchbox(e.target.checked)} style={styles.checkbox} required />
-    <span>
-      <strong>Pflichtbestätigung Lunchbox</strong><br/>
-      <span style={{fontSize: 13, color: "#44403c"}}>
-        Ich bestätige hiermit verbindlich, dass ich die Lunchbox bis spätestens Freitag der gleichen Lieferwoche in einwandfreiem und gereinigtem Zustand zurückzugeben. Bei Nichterfüllung bin ich verpflichtet, den Ersatzwert der Lunchbox (CHF 10.00) zu erstatten. Mit dem Setzen dieses Hakens anerkenne ich diese Bedingungen ausdrücklich und rechtsverbindlich.
-      </span>
-    </span>
-  </label>
-  {!lunchbox && <p style={{color: "#dc2626", fontSize: 12, marginTop: 8}}>⚠️ Diese Bestätigung ist zwingend erforderlich um bestellen zu können.</p>}
-</div>
+          <div style={{ ...styles.optionCard, border: lunchbox ? "1.5px solid #15803d" : "1.5px solid #dc2626", background: lunchbox ? "#f0fdf4" : "#fff7f7" }}>
+            <label style={styles.checkboxLabel}>
+              <input type="checkbox" checked={lunchbox} onChange={e => setLunchbox(e.target.checked)} style={styles.checkbox} required />
+              <span>
+                <strong>Pflichtbestätigung Lunchbox</strong><br />
+                <span style={{ fontSize: 13, color: "#44403c" }}>
+                  Ich bestätige hiermit verbindlich, dass ich die Lunchbox bis spätestens Freitag der gleichen Lieferwoche in einwandfreiem und gereinigtem Zustand zurückzugeben. Bei Nichterfüllung bin ich verpflichtet, den Ersatzwert der Lunchbox (CHF 10.00) zu erstatten. Mit dem Setzen dieses Hakens anerkenne ich diese Bedingungen ausdrücklich und rechtsverbindlich.
+                </span>
+              </span>
+            </label>
+            {!lunchbox && <p style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>⚠️ Diese Bestätigung ist zwingend erforderlich um bestellen zu können.</p>}
+          </div>
 
           <div style={styles.priceRow}>
             <span>Preis pro Menü:</span>
@@ -589,44 +606,56 @@ setTwintInfo({
   );
 }
 
-function MenuCard({ number, menu, selected, onSelect, showProtein, proteinChoice, onProteinChange }) {
+function MenuCard({ number, menu, selected, onSelect, showProtein, proteinChoice, onProteinChange, isMobile }) {
   if (!menu) return null;
   return (
     <div style={{ ...styles.menuCard, ...(selected ? styles.menuCardSelected : {}) }} onClick={onSelect}>
       <div style={styles.menuCardNumber}>Menü {number}</div>
-{menu.image_url && (
-  <img src={menu.image_url} alt={menu.title} style={{ width: "50%", height: 150, objectFit: "cover", objectPosition: "center", borderRadius: 8, marginBottom: 12, display: "block" }} />
-)}
-<h3 style={styles.menuCardTitle}>{menu.title}</h3>
-<p style={styles.menuCardDesc}>{menu.description}</p>
+      {menu.image_url && (
+        <img
+          src={menu.image_url}
+          alt={menu.title}
+          style={{
+            width: isMobile ? "100%" : "50%",
+            height: isMobile ? 180 : 150,
+            objectFit: "cover",
+            objectPosition: "center",
+            borderRadius: 8,
+            marginBottom: 12,
+            display: "block"
+          }}
+        />
+      )}
+      <h3 style={styles.menuCardTitle}>{menu.title}</h3>
+      <p style={styles.menuCardDesc}>{menu.description}</p>
       {menu.is_vegetarian_possible && <span style={styles.vegiTag}>🌱 Vegetarisch möglich</span>}
-{selected && menu.protein_options && menu.protein_options !== "keine" && menu.protein_options !== "" && (() => {
-  const proteins = menu.protein_options.split(",").map(p => p.trim());
-  if (proteins.length <= 1) return null;
-  return (
-    <div style={{ marginTop: 12 }} onClick={e => e.stopPropagation()}>
-      <label style={styles.label}>Protein-Wahl: *</label>
-      <div style={styles.radioRow}>
-        {proteins.map(p => (
-          <label key={p} style={styles.radioLabel}>
-            <input type="radio" name="protein" value={p} checked={proteinChoice === p} onChange={() => onProteinChange(p)} />
-            {p === "Fisch" ? "🐟 Fisch": p === "Schweinefleisch" ? "🐷 Schweinefleisch": p === "Lachs" ? "🍣 Lachs" :p === "Poulet" ? "🐓 Poulet" : p === "Crevetten" ? "🦐 Crevetten" : p === "Rindfleisch" ? "🥩 Rindfleisch" : p === "Tofu" ? "🌱 Tofu" : `🍖 ${p}`}
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-})()}
+      {selected && menu.protein_options && menu.protein_options !== "keine" && menu.protein_options !== "" && (() => {
+        const proteins = menu.protein_options.split(",").map(p => p.trim());
+        if (proteins.length <= 1) return null;
+        return (
+          <div style={{ marginTop: 12 }} onClick={e => e.stopPropagation()}>
+            <label style={styles.label}>Protein-Wahl: *</label>
+            <div style={{ ...styles.radioRow, flexWrap: "wrap" }}>
+              {proteins.map(p => (
+                <label key={p} style={styles.radioLabel}>
+                  <input type="radio" name="protein" value={p} checked={proteinChoice === p} onChange={() => onProteinChange(p)} />
+                  {p === "Fisch" ? "🐟 Fisch" : p === "Schweinefleisch" ? "🐷 Schweinefleisch" : p === "Lachs" ? "🍣 Lachs" : p === "Poulet" ? "🐓 Poulet" : p === "Crevetten" ? "🦐 Crevetten" : p === "Rindfleisch" ? "🥩 Rindfleisch" : p === "Tofu" ? "🌱 Tofu" : `🍖 ${p}`}
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
+
 function TwintPayment({ twintInfo, weekNumber }) {
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const phone = twintInfo.phone?.replace(/\D/g, "");
   const amount = twintInfo.amount?.toFixed(2);
   const message = `ThaiMen%C3%BC%20KW${weekNumber}`;
   const deeplink = `twint://payment?amount=${amount}&phone=${phone}&message=${message}`;
-  const qrValue = twintInfo.phone;
 
   return (
     <div style={{ background: "#00B4E6", borderRadius: 12, padding: 20, marginTop: 16, textAlign: "center" }}>
@@ -636,56 +665,60 @@ function TwintPayment({ twintInfo, weekNumber }) {
       <div style={{ color: "#fff", fontSize: 13, marginBottom: 16 }}>
         Zahlung an: <strong>{twintInfo.contact}</strong> ({twintInfo.phone})
       </div>
-      {isMobile ? (
+      {isMobileDevice ? (
         <a href={deeplink} style={{ display: "block", background: "#fff", color: "#00B4E6", padding: "12px 20px", borderRadius: 8, fontWeight: 700, fontSize: 15, textDecoration: "none" }}>
           👆 Twint App öffnen
         </a>
-) : (
-        <div style={{ color: "#fff", fontSize: 14 }}>
-        </div>
+      ) : (
+        <div style={{ color: "#fff", fontSize: 14 }} />
       )}
     </div>
   );
 }
-function ExistingOrderCard({ order, weeklyMenu, twintInfo, setPage }) {
-const menuName = order.menu_choice === 1 ? weeklyMenu?.menu1?.title : weeklyMenu?.menu2?.title;
-const [paidConfirmed, setPaidConfirmed] = useState(false);
-const twintPhone = twintInfo?.phone?.replace(/\D/g, "").replace(/^0/, "41");
-const twintLink = twintInfo
-    ? `https://www.twint.ch/pay/?phone=${twintPhone}&amount=${twintInfo.amount}&message=ThaiMen%C3%BC`
-    : null;
+
+function ExistingOrderCard({ order, weeklyMenu, twintInfo, setPage, onNewOrder }) {
+  const menuName = order.menu_choice === 1 ? weeklyMenu?.menu1?.title : weeklyMenu?.menu2?.title;
+  const [paidConfirmed, setPaidConfirmed] = useState(false);
+  const twintPhone = twintInfo?.phone?.replace(/\D/g, "").replace(/^0/, "41");
 
   return (
     <div style={styles.successCard}>
       <div style={{ fontSize: 48, textAlign: "center" }}>✅</div>
       <h2 style={{ textAlign: "center", color: "#15803d" }}>Bestellung aufgegeben!</h2>
+      <h4 style={{ textAlign: "center", color: "#15803d" }}>Danke für deine Bestellung</h4>
       <div style={styles.orderSummary}>
         <div style={styles.orderRow}><span>Menü</span><strong>{menuName}</strong></div>
         <div style={styles.orderRow}><span>Vegetarisch</span><strong>{order.is_vegetarian ? "Ja" : "Nein"}</strong></div>
         {order.protein_choice && <div style={styles.orderRow}><span>Protein</span><strong>{order.protein_choice}</strong></div>}
         <div style={styles.orderRow}><span>Lunchbox</span><strong>{order.lunchbox_requested ? "Ja" : "Nein"}</strong></div>
         <div style={styles.orderRow}><span>Preis</span><strong>CHF {order.total_price?.toFixed(2)}</strong></div>
-        <div style={styles.orderRow}><span>Bezahlt</span><strong>{order.payment_status === "paid" ? "✅ Ja" : "⏳ Ausstehend"}</strong></div>
+        <div style={styles.orderRow}><span>Bezahlt</span><strong>{order.payment_status === "paid" ? "✅ Ja" : "Ausstehend"}</strong></div>
       </div>
-{twintInfo && order.payment_status !== "paid" && (
-  <TwintPayment twintInfo={twintInfo} weekNumber={weeklyMenu?.week_number} />
-)}
-{order.payment_status !== "paid" && !paidConfirmed && (
-  <button style={{ ...styles.btnPrimary, width: "100%", marginTop: 12 }}
-    onClick={() => setPaidConfirmed(true)}>
-    Hiermit bestätige das ich Bezahlt habe
-  </button>
-)}
-{paidConfirmed && (
-  <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: 16, marginTop: 12, textAlign: "center" }}>
-    <div style={{ fontSize: 32 }}>🙏</div>
-    <div style={{ fontWeight: 700, color: "#15803d", marginBottom: 4 }}>Danke für deine Zahlung!</div>
-    <div style={{ fontSize: 13, color: "#166534", marginBottom: 16 }}>Die Zahlung wird von uns überprüft und bestätigt.</div>
-<button style={styles.btnSecondary} onClick={() => setPage("history")}>
-  zu meine Bestellübersicht
-</button>
-  </div>
-)}
+      {twintInfo && order.payment_status !== "paid" && (
+        <TwintPayment twintInfo={twintInfo} weekNumber={weeklyMenu?.week_number} />
+      )}
+      {order.payment_status !== "paid" && !paidConfirmed && (
+        <button style={{ ...styles.btnPrimary, width: "100%", marginTop: 12 }}
+          onClick={() => setPaidConfirmed(true)}>
+          Hiermit bestätige das ich Bezahlt habe
+        </button>
+      )}
+      {paidConfirmed && (
+        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: 16, marginTop: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 32 }}>🙏</div>
+          <div style={{ fontWeight: 700, color: "#15803d", marginBottom: 4 }}>Danke für deine Zahlung!</div>
+          <div style={{ fontSize: 13, color: "#166534", marginBottom: 16 }}>Die Zahlung wird von uns überprüft und bestätigt.</div>
+          <button style={styles.btnSecondary} onClick={() => setPage("history")}>
+            zu meine Bestellübersicht
+          </button>
+        </div>
+      )}
+      {onNewOrder && (
+        <button style={{ ...styles.btnSecondary, width: "100%", marginTop: 12 }}
+          onClick={onNewOrder}>
+          Weiteres Menü bestellen
+        </button>
+      )}
     </div>
   );
 }
@@ -695,17 +728,37 @@ const twintLink = twintInfo
 // ============================================
 function OrderHistory() {
   const { profile, supabase } = useAuth();
+  const isMobile = useIsMobile();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editOrder, setEditOrder] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
-  useEffect(() => {
-    supabase
+  useEffect(() => { loadOrders(); }, []);
+
+  async function loadOrders() {
+    const { data } = await supabase
       .from("orders")
-      .select("*, weekly_menus(week_number, year, delivery_date, menu1:menu1_id(title), menu2:menu2_id(title))")
+      .select("*, weekly_menus(week_number, year, delivery_date, order_deadline, menu1:menu1_id(title, protein_options), menu2:menu2_id(title, protein_options))")
       .eq("user_id", profile.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => { setOrders(data || []); setLoading(false); });
-  }, []);
+      .order("created_at", { ascending: false });
+    setOrders(data || []);
+    setLoading(false);
+  }
+
+  async function handleDelete(order) {
+    if (!window.confirm("Bestellung wirklich löschen?")) return;
+    setDeleting(order.id);
+    await supabase.from("orders").delete().eq("id", order.id);
+    setOrders(orders.filter(o => o.id !== order.id));
+    setDeleting(null);
+  }
+
+  async function handleSave(order, changes) {
+    await supabase.from("orders").update(changes).eq("id", order.id);
+    setOrders(orders.map(o => o.id === order.id ? { ...o, ...changes } : o));
+    setEditOrder(null);
+  }
 
   if (loading) return <LoadingScreen />;
 
@@ -714,26 +767,151 @@ function OrderHistory() {
       <h1 style={styles.pageTitle}>Meine Bestellungen</h1>
       {orders.length === 0 ? (
         <div style={styles.emptyState}><div style={{ fontSize: 48 }}>📭</div><p>Noch keine Bestellungen.</p></div>
+      ) : isMobile ? (
+        // ── MOBILE: Card-Ansicht ──
+        <div>
+          {orders.map(o => {
+            const menuTitle = o.menu_choice === 1 ? o.weekly_menus?.menu1?.title : o.weekly_menus?.menu2?.title;
+            const deadline = o.weekly_menus?.order_deadline;
+            const canEdit = deadline ? new Date() < new Date(deadline) : false;
+            const isEditing = editOrder?.id === o.id;
+
+            return (
+              <div key={o.id} style={styles.mobileCard}>
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={styles.weekBadge}>KW {o.weekly_menus?.week_number}/{o.weekly_menus?.year}</span>
+                  <span style={{ fontSize: 13, color: "#78716c" }}>{o.weekly_menus?.delivery_date}</span>
+                </div>
+
+                {/* Menü */}
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Menü</span>
+                  {isEditing ? (
+                    <select value={editOrder.menu_choice}
+                      onChange={e => setEditOrder({ ...editOrder, menu_choice: parseInt(e.target.value) })}
+                      style={{ ...styles.select, padding: "4px 8px", width: "auto", fontSize: 14 }}>
+                      <option value={1}>{o.weekly_menus?.menu1?.title}</option>
+                      <option value={2}>{o.weekly_menus?.menu2?.title}</option>
+                    </select>
+                  ) : <span style={styles.mobileCardValue}>{menuTitle}</span>}
+                </div>
+
+                {/* Checkboxen */}
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Vegetarisch</span>
+                  {isEditing ? (
+                    <input type="checkbox" checked={editOrder.is_vegetarian}
+                      onChange={e => setEditOrder({ ...editOrder, is_vegetarian: e.target.checked })} />
+                  ) : <span>{o.is_vegetarian ? "✅ Ja" : "—"}</span>}
+                </div>
+
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Lunchbox</span>
+                  {isEditing ? (
+                    <input type="checkbox" checked={editOrder.lunchbox_requested}
+                      onChange={e => setEditOrder({ ...editOrder, lunchbox_requested: e.target.checked })} />
+                  ) : <span>{o.lunchbox_requested ? "✅ Ja" : "—"}</span>}
+                </div>
+
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Preis</span>
+                  <span style={styles.mobileCardValue}>CHF {o.total_price?.toFixed(2)}</span>
+                </div>
+
+                <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
+                  <span style={styles.mobileCardLabel}>Bezahlt</span>
+                  <span style={{ fontWeight: 600, color: o.payment_status === "paid" ? "#15803d" : "#92400e" }}>
+                    {o.payment_status === "paid" ? "✅ Bezahlt" : "⏳ Ausstehend"}
+                  </span>
+                </div>
+
+                {/* Aktionen */}
+                <div style={styles.mobileCardActions}>
+                  {canEdit && !isEditing && (
+                    <>
+                      <button style={styles.btnSmall} onClick={() => setEditOrder({ ...o })}>✏️ Bearbeiten</button>
+                      <button style={{ ...styles.btnSmallRed, opacity: deleting === o.id ? 0.5 : 1 }}
+                        onClick={() => handleDelete(o)}>🗑️ Löschen</button>
+                    </>
+                  )}
+                  {isEditing && (
+                    <>
+                      <button style={styles.btnSmallGreen}
+                        onClick={() => handleSave(o, { menu_choice: editOrder.menu_choice, is_vegetarian: editOrder.is_vegetarian, lunchbox_requested: editOrder.lunchbox_requested })}>
+                        ✅ Speichern
+                      </button>
+                      <button style={styles.btnSmall} onClick={() => setEditOrder(null)}>✕ Abbrechen</button>
+                    </>
+                  )}
+                  {!canEdit && <span style={{ color: "#9ca3af", fontSize: 12 }}>Bestellfrist abgelaufen</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        // ── DESKTOP: Tabellen-Ansicht ──
         <div style={styles.tableWrapper}>
           <table style={styles.table}>
             <thead>
-              <tr>{["KW", "Datum", "Menü", "Vegetarisch", "Lunchbox", "Preis", "Bezahlt"].map(h => (
+              <tr>{["KW", "Datum", "Menü", "Vegetarisch", "Lunchbox", "Preis", "Bezahlt", "Aktionen"].map(h => (
                 <th key={h} style={styles.th}>{h}</th>
               ))}</tr>
             </thead>
             <tbody>
               {orders.map(o => {
                 const menuTitle = o.menu_choice === 1 ? o.weekly_menus?.menu1?.title : o.weekly_menus?.menu2?.title;
+                const deadline = o.weekly_menus?.order_deadline;
+                const canEdit = deadline ? new Date() < new Date(deadline) : false;
+                const isEditing = editOrder?.id === o.id;
                 return (
                   <tr key={o.id} style={styles.tr}>
                     <td style={styles.td}>{o.weekly_menus?.week_number}/{o.weekly_menus?.year}</td>
                     <td style={styles.td}>{o.weekly_menus?.delivery_date}</td>
-                    <td style={styles.td}>{menuTitle}</td>
-                    <td style={styles.td}>{o.is_vegetarian ? "✅" : "—"}</td>
-                    <td style={styles.td}>{o.lunchbox_requested ? "✅" : "—"}</td>
+                    <td style={styles.td}>
+                      {isEditing ? (
+                        <select value={editOrder.menu_choice}
+                          onChange={e => setEditOrder({ ...editOrder, menu_choice: parseInt(e.target.value) })}
+                          style={styles.input}>
+                          <option value={1}>{o.weekly_menus?.menu1?.title}</option>
+                          <option value={2}>{o.weekly_menus?.menu2?.title}</option>
+                        </select>
+                      ) : menuTitle}
+                    </td>
+                    <td style={styles.td}>
+                      {isEditing ? (
+                        <input type="checkbox" checked={editOrder.is_vegetarian}
+                          onChange={e => setEditOrder({ ...editOrder, is_vegetarian: e.target.checked })} />
+                      ) : o.is_vegetarian ? "✅" : "—"}
+                    </td>
+                    <td style={styles.td}>
+                      {isEditing ? (
+                        <input type="checkbox" checked={editOrder.lunchbox_requested}
+                          onChange={e => setEditOrder({ ...editOrder, lunchbox_requested: e.target.checked })} />
+                      ) : o.lunchbox_requested ? "✅" : "—"}
+                    </td>
                     <td style={styles.td}>CHF {o.total_price?.toFixed(2)}</td>
-                    <td style={styles.td}>{o.payment_status === "paid" ? "✅" : "⏳"}</td>
+                    <td style={styles.td}>{o.payment_status === "paid" ? "✅" : "Ausstehend"}</td>
+                    <td style={styles.td}>
+                      {canEdit && !isEditing && (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button style={styles.btnSmall} onClick={() => setEditOrder({ ...o })}>Bearbeiten</button>
+                          <button style={{ ...styles.btnSmallRed, opacity: deleting === o.id ? 0.5 : 1 }}
+                            onClick={() => handleDelete(o)}>🗑️</button>
+                        </div>
+                      )}
+                      {isEditing && (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button style={styles.btnSmallGreen}
+                            onClick={() => handleSave(o, { menu_choice: editOrder.menu_choice, is_vegetarian: editOrder.is_vegetarian, lunchbox_requested: editOrder.lunchbox_requested })}>
+                            Speichern
+                          </button>
+                          <button style={styles.btnSmall} onClick={() => setEditOrder(null)}>✕</button>
+                        </div>
+                      )}
+                      {!canEdit && <span style={{ color: "#9ca3af", fontSize: 12 }}>Frist abgelaufen</span>}
+                    </td>
                   </tr>
                 );
               })}
@@ -746,10 +924,11 @@ function OrderHistory() {
 }
 
 // ============================================
-// ADMIN: BESTELLUNGEN + PDF EXPORT
+// CONTACT: BESTELLÜBERSICHT
 // ============================================
 function ContactOrders() {
   const { supabase, profile } = useAuth();
+  const isMobile = useIsMobile();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openWeeks, setOpenWeeks] = useState({});
@@ -766,8 +945,6 @@ function ContactOrders() {
       .order("week_number", { ascending: false })
       .order("full_name");
     setOrders(data || []);
-
-    // Neueste KW automatisch aufklappen
     if (data && data.length > 0) {
       const firstKey = `${data[0].year}-${data[0].week_number}`;
       setOpenWeeks({ [firstKey]: true });
@@ -789,7 +966,6 @@ function ContactOrders() {
     setOpenWeeks(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
-  // Bestellungen nach KW gruppieren
   const grouped = {};
   orders.forEach(o => {
     const key = `${o.year}-${o.week_number}`;
@@ -818,56 +994,111 @@ function ContactOrders() {
 
         return (
           <div key={key} style={{ background: "#fff", border: "1px solid #e7e5e4", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}>
-            {/* Header / Klappzeile */}
+            {/* Akkordeon-Header */}
             <div
               onClick={() => toggleWeek(key)}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", cursor: "pointer", background: isOpen ? "#fff7ed" : "#fff", borderBottom: isOpen ? "1px solid #e7e5e4" : "none" }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 18 }}>{isOpen ? "▾" : "▸"}</span>
                 <strong style={{ fontSize: 16, color: "#1c1917" }}>KW {week} / {year}</strong>
-                <span style={{ background: "#f5f5f4", color: "#78716c", borderRadius: 20, padding: "2px 10px", fontSize: 13 }}>{weekOrders.length} Bestellung{weekOrders.length !== 1 ? "en" : ""}</span>
+                <span style={{ background: "#f5f5f4", color: "#78716c", borderRadius: 20, padding: "2px 10px", fontSize: 13 }}>
+                  {weekOrders.length} Bestellung{weekOrders.length !== 1 ? "en" : ""}
+                </span>
               </div>
               <span style={{ fontWeight: 700, color: "#b45309" }}>CHF {total.toFixed(2)}</span>
             </div>
 
-            {/* Tabelle (ausgeklappt) */}
+            {/* Inhalt */}
             {isOpen && (
-              <div style={styles.tableWrapper}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr>{["Name", "Menü", "Vegi", "Protein", "Lunchbox ↩", "Preis", "Bezahlt", "Aktionen"].map(h => (
-                      <th key={h} style={styles.th}>{h}</th>
-                    ))}</tr>
-                  </thead>
-                  <tbody>
-                    {weekOrders.map(o => (
-                      <tr key={o.id} style={styles.tr}>
-                        <td style={styles.td}>{o.full_name}</td>
-                        <td style={styles.td}>Menü {o.menu_choice}: {o.menu_title}</td>
-                        <td style={styles.td}>{o.is_vegetarian ? "✅" : "—"}</td>
-                        <td style={styles.td}>{o.protein_choice || "—"}</td>
-                        <td style={styles.td}>{o.lunchbox_returned ? "✅" : o.lunchbox_requested ? "⏳" : "—"}</td>
-                        <td style={styles.td}>CHF {parseFloat(o.total_price).toFixed(2)}</td>
-                        <td style={styles.td}>{o.payment_status === "paid" ? "✅" : "⏳"}</td>
-                        <td style={styles.td}>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            {o.payment_status !== "paid" && (
-                              <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>💰 Bezahlt</button>
-                            )}
-                            {o.lunchbox_requested && !o.lunchbox_returned && (
-                              <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>📦 Zurück</button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={styles.totalRow}>
-                  <strong>Total: CHF {total.toFixed(2)}</strong>
+              isMobile ? (
+                // ── MOBILE: Cards ──
+                <div style={{ padding: "12px" }}>
+                  {weekOrders.map(o => (
+                    <div key={o.id} style={{ ...styles.mobileCard, marginBottom: 10 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{o.full_name}</div>
+                      <div style={styles.mobileCardRow}>
+                        <span style={styles.mobileCardLabel}>Menü</span>
+                        <span style={styles.mobileCardValue}>Menü {o.menu_choice}: {o.menu_title}</span>
+                      </div>
+                      <div style={styles.mobileCardRow}>
+                        <span style={styles.mobileCardLabel}>Vegetarisch</span>
+                        <span>{o.is_vegetarian ? "✅" : "—"}</span>
+                      </div>
+                      {o.protein_choice && (
+                        <div style={styles.mobileCardRow}>
+                          <span style={styles.mobileCardLabel}>Protein</span>
+                          <span>{o.protein_choice}</span>
+                        </div>
+                      )}
+                      <div style={styles.mobileCardRow}>
+                        <span style={styles.mobileCardLabel}>Lunchbox ↩</span>
+                        <span style={{ color: o.lunchbox_returned ? "#15803d" : o.lunchbox_requested ? "#92400e" : "#6b7280" }}>
+                          {o.lunchbox_returned ? "✅ Zurück" : o.lunchbox_requested ? "⏳ Ausstehend" : "—"}
+                        </span>
+                      </div>
+                      <div style={styles.mobileCardRow}>
+                        <span style={styles.mobileCardLabel}>Preis</span>
+                        <span style={styles.mobileCardValue}>CHF {parseFloat(o.total_price).toFixed(2)}</span>
+                      </div>
+                      <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
+                        <span style={styles.mobileCardLabel}>Bezahlt</span>
+                        <span style={{ fontWeight: 600, color: o.payment_status === "paid" ? "#15803d" : "#92400e" }}>
+                          {o.payment_status === "paid" ? "✅ Bezahlt" : "⏳ Ausstehend"}
+                        </span>
+                      </div>
+                      <div style={styles.mobileCardActions}>
+                        {o.payment_status !== "paid" && (
+                          <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>✅ Bezahlt</button>
+                        )}
+                        {o.lunchbox_requested && !o.lunchbox_returned && (
+                          <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>📦 Zurück</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ textAlign: "right", fontWeight: 700, fontSize: 15, paddingTop: 8, borderTop: "2px solid #e7e5e4" }}>
+                    Total: CHF {total.toFixed(2)}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                // ── DESKTOP: Tabelle ──
+                <div style={styles.tableWrapper}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>{["Name", "Menü", "Vegi", "Protein", "Lunchbox ↩", "Preis", "Bezahlt", "Aktionen"].map(h => (
+                        <th key={h} style={styles.th}>{h}</th>
+                      ))}</tr>
+                    </thead>
+                    <tbody>
+                      {weekOrders.map(o => (
+                        <tr key={o.id} style={styles.tr}>
+                          <td style={styles.td}>{o.full_name}</td>
+                          <td style={styles.td}>Menü {o.menu_choice}: {o.menu_title}</td>
+                          <td style={styles.td}>{o.is_vegetarian ? "✅" : "—"}</td>
+                          <td style={styles.td}>{o.protein_choice || "—"}</td>
+                          <td style={styles.td}>{o.lunchbox_returned ? "✅" : o.lunchbox_requested ? "Ausstehend" : "—"}</td>
+                          <td style={styles.td}>CHF {parseFloat(o.total_price).toFixed(2)}</td>
+                          <td style={styles.td}>{o.payment_status === "paid" ? "✅" : "Ausstehend"}</td>
+                          <td style={styles.td}>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              {o.payment_status !== "paid" && (
+                                <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>Bezahlt</button>
+                              )}
+                              {o.lunchbox_requested && !o.lunchbox_returned && (
+                                <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>Zurück</button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={styles.totalRow}>
+                    <strong>Total: CHF {total.toFixed(2)}</strong>
+                  </div>
+                </div>
+              )
             )}
           </div>
         );
@@ -875,8 +1106,13 @@ function ContactOrders() {
     </div>
   );
 }
+
+// ============================================
+// ADMIN: BESTELLUNGEN + PDF EXPORT
+// ============================================
 function AdminOrders() {
   const { supabase } = useAuth();
+  const isMobile = useIsMobile();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterWeek, setFilterWeek] = useState(getWeekNumber().week);
@@ -919,23 +1155,20 @@ function AdminOrders() {
     doc.setFontSize(11);
     doc.setFont("helvetica", "normal");
     doc.text(`Erstellt am: ${new Date().toLocaleDateString("de-CH")}`, 14, 28);
-
     const grouped = {};
     orders.forEach(o => {
       if (!grouped[o.company_name]) grouped[o.company_name] = [];
       grouped[o.company_name].push(o);
     });
-
     let y = 38;
     Object.entries(grouped).forEach(([company, compOrders]) => {
       if (y > 260) { doc.addPage(); y = 20; }
       doc.setFont("helvetica", "bold");
       doc.setFontSize(13);
       doc.text(company, 14, y); y += 7;
-
       doc.autoTable({
         startY: y,
-head: [["Name", "Menü", "Vegi", "Protein"]],
+        head: [["Name", "Menü", "Vegi", "Protein"]],
         body: compOrders.map(o => [
           o.full_name,
           `Menü ${o.menu_choice}: ${o.menu_title}`,
@@ -946,7 +1179,6 @@ head: [["Name", "Menü", "Vegi", "Protein"]],
         headStyles: { fillColor: [180, 83, 9] },
         margin: { left: 14, right: 14 },
       });
-
       const total = compOrders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
       y = doc.lastAutoTable.finalY + 4;
       doc.setFont("helvetica", "bold");
@@ -954,75 +1186,154 @@ head: [["Name", "Menü", "Vegi", "Protein"]],
       doc.text(`Total ${company}: CHF ${total.toFixed(2)}`, 14, y);
       y += 10;
     });
-
     const grandTotal = orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
     if (y > 270) doc.addPage();
     doc.setFontSize(13);
     doc.text(`Gesamttotal: CHF ${grandTotal.toFixed(2)}`, 14, y + 5);
-
     doc.save(`ThaiMenue_KW${filterWeek}_${filterYear}.pdf`);
   }
 
   return (
     <div style={styles.pageContainer}>
-      <div style={styles.pageHeaderRow} className="page-header-row">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <h1 style={styles.pageTitle}>Bestellungen</h1>
-        <button style={styles.btnPrimary} onClick={exportPDF}>📄 PDF exportieren</button>
+        <button style={styles.btnPrimary} onClick={exportPDF}>📄 PDF</button>
       </div>
 
-      <div style={styles.filterRow} className="filter-row">
-        <label style={styles.label}>KW:</label>
-        <input type="number" value={filterWeek} onChange={e => setFilterWeek(Number(e.target.value))} style={{ ...styles.input, width: 70 }} min={1} max={53} />
-        <label style={styles.label}>Jahr:</label>
-        <input type="number" value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} style={{ ...styles.input, width: 90 }} />
-        <label style={styles.label}>Firma:</label>
-        <select style={styles.select} value={filterCompany} onChange={e => setFilterCompany(e.target.value)}>
-          <option value="all">Alle</option>
-          {companies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-        </select>
+      {/* Filter */}
+      <div style={{ marginBottom: 16 }}>
+        {/* KW + Jahr nebeneinander */}
+        <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+            <label style={styles.label}>KW</label>
+            <input type="number" value={filterWeek} onChange={e => setFilterWeek(Number(e.target.value))}
+              style={{ ...styles.input, minWidth: 0 }} min={1} max={53} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+            <label style={styles.label}>Jahr</label>
+            <input type="number" value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}
+              style={{ ...styles.input, minWidth: 0 }} />
+          </div>
+        </div>
+        {/* Firma */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label style={styles.label}>Firma</label>
+          <select style={styles.select} value={filterCompany} onChange={e => setFilterCompany(e.target.value)}>
+            <option value="all">Alle Firmen</option>
+            {companies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+        </div>
       </div>
 
       {loading ? <LoadingScreen /> : (
-        <div style={styles.tableWrapper}>
-          <table style={styles.table}>
-            <thead>
-              <tr>{["Firma", "Name", "Menü", "Vegi", "Protein", "Lunchbox", "Lunchbox ↩", "Preis", "Bezahlt", "Aktionen"].map(h => (
-                <th key={h} style={styles.th}>{h}</th>
-              ))}</tr>
-            </thead>
-            <tbody>
-              {orders.map(o => (
-                <tr key={o.id} style={styles.tr}>
-                  <td style={styles.td}>{o.company_name}</td>
-                  <td style={styles.td}>{o.full_name}</td>
-                  <td style={styles.td}>Menü {o.menu_choice}: {o.menu_title}</td>
-                  <td style={styles.td}>{o.is_vegetarian ? "✅" : "—"}</td>
-                  <td style={styles.td}>{o.protein_choice || "—"}</td>
-                  <td style={styles.td}>{o.lunchbox_requested ? "📦" : "—"}</td>
-                  <td style={styles.td}>{o.lunchbox_returned ? "✅" : o.lunchbox_requested ? "⏳" : "—"}</td>
-                  <td style={styles.td}>CHF {parseFloat(o.total_price).toFixed(2)}</td>
-                  <td style={styles.td}>{o.payment_status === "paid" ? "✅" : "⏳"}</td>
-                  <td style={styles.td}>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      {o.payment_status !== "paid" && (
-                        <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>💰 Bezahlt</button>
-                      )}
-                      {o.lunchbox_requested && !o.lunchbox_returned && (
-                        <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>Lunchbox zurück</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {orders.length === 0 && (
-                <tr><td colSpan={10} style={{ ...styles.td, textAlign: "center", color: "#9ca3af" }}>Keine Bestellungen gefunden.</td></tr>
-              )}
-            </tbody>
-          </table>
-          <div style={styles.totalRow}>
-            <strong>Total: CHF {orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0).toFixed(2)}</strong>
+        isMobile ? (
+          // ── MOBILE: Cards ──
+          <div>
+            {orders.length === 0 && (
+              <div style={styles.emptyState}><div style={{ fontSize: 48 }}>📭</div><p>Keine Bestellungen gefunden.</p></div>
+            )}
+            {orders.map(o => (
+              <div key={o.id} style={styles.mobileCard}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{o.full_name}</div>
+                    <div style={{ fontSize: 13, color: "#78716c" }}>{o.company_name}</div>
+                  </div>
+                  <span style={{ ...styles.weekBadge, fontSize: 12 }}>KW {filterWeek}</span>
+                </div>
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Menü</span>
+                  <span style={styles.mobileCardValue}>Menü {o.menu_choice}: {o.menu_title}</span>
+                </div>
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Vegetarisch</span>
+                  <span>{o.is_vegetarian ? "✅ Ja" : "—"}</span>
+                </div>
+                {o.protein_choice && (
+                  <div style={styles.mobileCardRow}>
+                    <span style={styles.mobileCardLabel}>Protein</span>
+                    <span>{o.protein_choice}</span>
+                  </div>
+                )}
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Lunchbox</span>
+                  <span>{o.lunchbox_requested ? "Ja" : "—"}</span>
+                </div>
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Lunchbox ↩</span>
+                  <span style={{ color: o.lunchbox_returned ? "#15803d" : o.lunchbox_requested ? "#92400e" : "#6b7280" }}>
+                    {o.lunchbox_returned ? "✅ Zurück" : o.lunchbox_requested ? "⏳ Ausstehend" : "—"}
+                  </span>
+                </div>
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Preis</span>
+                  <span style={styles.mobileCardValue}>CHF {parseFloat(o.total_price).toFixed(2)}</span>
+                </div>
+                <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
+                  <span style={styles.mobileCardLabel}>Bezahlt</span>
+                  <span style={{ fontWeight: 600, color: o.payment_status === "paid" ? "#15803d" : "#92400e" }}>
+                    {o.payment_status === "paid" ? "✅ Bezahlt" : "⏳ Ausstehend"}
+                  </span>
+                </div>
+                <div style={styles.mobileCardActions}>
+                  {o.payment_status !== "paid" && (
+                    <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>✅ Bezahlt</button>
+                  )}
+                  {o.lunchbox_requested && !o.lunchbox_returned && (
+                    <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>📦 Lunchbox zurück</button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {orders.length > 0 && (
+              <div style={{ textAlign: "right", fontWeight: 700, fontSize: 16, padding: "12px 0" }}>
+                Total: CHF {orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0).toFixed(2)}
+              </div>
+            )}
           </div>
-        </div>
+        ) : (
+          // ── DESKTOP: Tabelle ──
+          <div style={styles.tableWrapper}>
+            <table style={styles.table}>
+              <thead>
+                <tr>{["Firma", "Name", "Menü", "Vegi", "Protein", "Lunchbox", "Lunchbox ↩", "Preis", "Bezahlt", "Aktionen"].map(h => (
+                  <th key={h} style={styles.th}>{h}</th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                {orders.map(o => (
+                  <tr key={o.id} style={styles.tr}>
+                    <td style={styles.td}>{o.company_name}</td>
+                    <td style={styles.td}>{o.full_name}</td>
+                    <td style={styles.td}>Menü {o.menu_choice}: {o.menu_title}</td>
+                    <td style={styles.td}>{o.is_vegetarian ? "✅" : "—"}</td>
+                    <td style={styles.td}>{o.protein_choice || "—"}</td>
+                    <td style={styles.td}>{o.lunchbox_requested ? "Ja" : "—"}</td>
+                    <td style={styles.td}>{o.lunchbox_returned ? "✅" : o.lunchbox_requested ? "Ausstehend" : "—"}</td>
+                    <td style={styles.td}>CHF {parseFloat(o.total_price).toFixed(2)}</td>
+                    <td style={styles.td}>{o.payment_status === "paid" ? "✅" : "Ausstehend"}</td>
+                    <td style={styles.td}>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {o.payment_status !== "paid" && (
+                          <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>Bezahlt</button>
+                        )}
+                        {o.lunchbox_requested && !o.lunchbox_returned && (
+                          <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>Lunchbox zurück</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {orders.length === 0 && (
+                  <tr><td colSpan={10} style={{ ...styles.td, textAlign: "center", color: "#9ca3af" }}>Keine Bestellungen gefunden.</td></tr>
+                )}
+              </tbody>
+            </table>
+            <div style={styles.totalRow}>
+              <strong>Total: CHF {orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0).toFixed(2)}</strong>
+            </div>
+          </div>
+        )
       )}
     </div>
   );
@@ -1033,6 +1344,7 @@ head: [["Name", "Menü", "Vegi", "Protein"]],
 // ============================================
 function AdminUsers() {
   const { supabase } = useAuth();
+  const isMobile = useIsMobile();
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1067,41 +1379,82 @@ function AdminUsers() {
   return (
     <div style={styles.pageContainer}>
       <h1 style={styles.pageTitle}>Benutzer verwalten</h1>
-      <div style={styles.tableWrapper}>
-        <table style={styles.table}>
-          <thead>
-            <tr>{["Name", "E-Mail", "Firma", "Freigegeben", "Admin", "Registriert"].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.id} style={styles.tr}>
-                <td style={styles.td}>{u.full_name}</td>
-                <td style={styles.td}>{u.email}</td>
-                <td style={styles.td}>
-                  <select style={{ ...styles.select, width: 160, padding: "4px 8px" }}
-                    value={u.company_id || ""} onChange={e => updateCompany(u.id, e.target.value)}>
-                    <option value="">—</option>
-                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </td>
-                <td style={styles.td}>
+
+      {isMobile ? (
+        // ── MOBILE: Cards ──
+        <div>
+          {users.map(u => (
+            <div key={u.id} style={styles.mobileCard}>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{u.full_name}</div>
+                <div style={{ fontSize: 13, color: "#78716c" }}>{u.email}</div>
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
+                  Registriert: {new Date(u.created_at).toLocaleDateString("de-CH")}
+                </div>
+              </div>
+
+              <div style={styles.mobileCardRow}>
+                <span style={styles.mobileCardLabel}>Firma</span>
+                <select style={{ ...styles.select, padding: "4px 8px", width: "auto", fontSize: 14 }}
+                  value={u.company_id || ""} onChange={e => updateCompany(u.id, e.target.value)}>
+                  <option value="">—</option>
+                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              <div style={{ ...styles.mobileCardRow, borderBottom: "none", marginTop: 10 }}>
+                <div style={styles.mobileCardActions}>
                   <button style={u.is_approved ? styles.btnSmallGreen : styles.btnSmallRed}
                     onClick={() => toggleApproval(u.id, u.is_approved)}>
-                    {u.is_approved ? "✅ Ja" : "❌ Nein"}
+                    {u.is_approved ? "✅ Freigegeben" : "❌ Gesperrt"}
                   </button>
-                </td>
-                <td style={styles.td}>
                   <button style={u.is_admin ? styles.btnSmallGreen : styles.btnSmall}
                     onClick={() => toggleAdmin(u.id, u.is_admin)}>
-                    {u.is_admin ? "✅" : "—"}
+                    {u.is_admin ? "👑 Admin" : "— Admin"}
                   </button>
-                </td>
-                <td style={styles.td}>{new Date(u.created_at).toLocaleDateString("de-CH")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        // ── DESKTOP: Tabelle ──
+        <div style={styles.tableWrapper}>
+          <table style={styles.table}>
+            <thead>
+              <tr>{["Name", "E-Mail", "Firma", "Freigegeben", "Admin", "Registriert"].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} style={styles.tr}>
+                  <td style={styles.td}>{u.full_name}</td>
+                  <td style={styles.td}>{u.email}</td>
+                  <td style={styles.td}>
+                    <select style={{ ...styles.select, width: 160, padding: "4px 8px" }}
+                      value={u.company_id || ""} onChange={e => updateCompany(u.id, e.target.value)}>
+                      <option value="">—</option>
+                      {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </td>
+                  <td style={styles.td}>
+                    <button style={u.is_approved ? styles.btnSmallGreen : styles.btnSmallRed}
+                      onClick={() => toggleApproval(u.id, u.is_approved)}>
+                      {u.is_approved ? "✅ Ja" : "❌ Nein"}
+                    </button>
+                  </td>
+                  <td style={styles.td}>
+                    <button style={u.is_admin ? styles.btnSmallGreen : styles.btnSmall}
+                      onClick={() => toggleAdmin(u.id, u.is_admin)}>
+                      {u.is_admin ? "✅" : "—"}
+                    </button>
+                  </td>
+                  <td style={styles.td}>{new Date(u.created_at).toLocaleDateString("de-CH")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1111,6 +1464,7 @@ function AdminUsers() {
 // ============================================
 function AdminMenus() {
   const { supabase } = useAuth();
+  const isMobile = useIsMobile();
   const [menus, setMenus] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newMenu, setNewMenu] = useState({ title: "", description: "", is_vegetarian_possible: true });
@@ -1140,80 +1494,144 @@ function AdminMenus() {
   return (
     <div style={styles.pageContainer}>
       <h1 style={styles.pageTitle}>Menü-Pool verwalten</h1>
+
+      {/* Formular */}
       <div style={styles.card}>
         <h3 style={{ marginBottom: 16 }}>Neues Menü hinzufügen</h3>
-        <form onSubmit={addMenu} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }} className="add-menu-form">
-<Input label="Titel" value={newMenu.title} onChange={e => setNewMenu({ ...newMenu, title: e.target.value })} required style={{ flex: 1, minWidth: 160 }} />
-<Input label="Beschreibung" value={newMenu.description} onChange={e => setNewMenu({ ...newMenu, description: e.target.value })} style={{ flex: 2, minWidth: 200 }} />
-<div style={styles.inputGroup}>
-  <label style={styles.label}>Bild hochladen</label>
-  <input type="file" accept="image/*" style={styles.input} onChange={async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const { data, error } = await supabase.storage.from('menu-images').upload(fileName, file);
-    if (!error) {
-      const { data: urlData } = supabase.storage.from('menu-images').getPublicUrl(fileName);
-      setNewMenu(m => ({ ...m, image_url: urlData.publicUrl }));
-    }
-  }} />
-  {newMenu.image_url && <img src={newMenu.image_url} alt="Vorschau" style={{ marginTop: 8, height: 80, borderRadius: 6, objectFit: "cover" }} />}
-</div>
-<div style={styles.inputGroup}>
-  <label style={styles.label}>Protein-Auswahl (z.B. "Poulet, Crevetten")</label>
-  <input style={styles.input} value={newMenu.protein_options || ""} 
-    placeholder="z.B. Poulet, Crevetten oder leer lassen"
-    onChange={e => setNewMenu({ ...newMenu, protein_options: e.target.value })} />
-</div>
-<label style={{ ...styles.checkboxLabel, alignSelf: "flex-end", paddingBottom: 8 }}>
-  <input type="checkbox" checked={newMenu.is_vegetarian_possible} onChange={e => setNewMenu({ ...newMenu, is_vegetarian_possible: e.target.checked })} />
-  Vegetarisch möglich
-</label>
-          <button type="submit" style={styles.btnPrimary} disabled={saving}>Hinzufügen</button>
+        <form onSubmit={addMenu} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr", gap: 12 }}>
+            <Input label="Titel" value={newMenu.title} onChange={e => setNewMenu({ ...newMenu, title: e.target.value })} required />
+            <Input label="Beschreibung" value={newMenu.description} onChange={e => setNewMenu({ ...newMenu, description: e.target.value })} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Bild hochladen</label>
+              <input type="file" accept="image/*" style={styles.input} onChange={async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${Date.now()}.${fileExt}`;
+                const { data, error } = await supabase.storage.from('menu-images').upload(fileName, file);
+                if (!error) {
+                  const { data: urlData } = supabase.storage.from('menu-images').getPublicUrl(fileName);
+                  setNewMenu(m => ({ ...m, image_url: urlData.publicUrl }));
+                }
+              }} />
+              {newMenu.image_url && <img src={newMenu.image_url} alt="Vorschau" style={{ marginTop: 8, height: 80, borderRadius: 6, objectFit: "cover" }} />}
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Protein-Auswahl (z.B. "Poulet, Crevetten")</label>
+              <input style={styles.input} value={newMenu.protein_options || ""}
+                placeholder="z.B. Poulet, Crevetten oder leer lassen"
+                onChange={e => setNewMenu({ ...newMenu, protein_options: e.target.value })} />
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+            <label style={styles.checkboxLabel}>
+              <input type="checkbox" checked={newMenu.is_vegetarian_possible} onChange={e => setNewMenu({ ...newMenu, is_vegetarian_possible: e.target.checked })} />
+              Vegetarisch möglich
+            </label>
+            <button type="submit" style={styles.btnPrimary} disabled={saving}>
+              {saving ? "Speichern…" : "Hinzufügen"}
+            </button>
+          </div>
         </form>
       </div>
 
-      <div style={styles.tableWrapper}>
-        <table style={styles.table}>
-        <thead><tr>{["Titel", "Beschreibung", "Protein", "Vegetarisch", "Bild", "Aktionen"].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr></thead>
-          <tbody>
-            {menus.map(m => (
-              <tr key={m.id} style={styles.tr}>
-<td style={styles.td}><strong>{m.title}</strong></td>
-<td style={styles.td}>{m.description}</td>
-<td style={styles.td}>{m.protein_options === "keine" || !m.protein_options ? "—" : m.protein_options.split(",").join(" / ")}</td>
-<td style={styles.td}>{m.is_vegetarian_possible ? "✅" : "—"}</td>
-<td style={styles.td}>
-  {m.image_url
-    ? <img src={m.image_url} alt={m.title} style={{ height: 40, borderRadius: 4, objectFit: "cover" }} />
-    : <span style={{ color: "#9ca3af", fontSize: 12 }}>Kein Bild</span>}
-</td>
-<td style={styles.td}>
-  <div style={{ display: "flex", gap: 4 }}>
-    <label style={{ ...styles.btnSmall, cursor: "pointer" }}>
-      Bild
-      <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const { error } = await supabase.storage.from('menu-images').upload(fileName, file);
-        if (!error) {
-          const { data: urlData } = supabase.storage.from('menu-images').getPublicUrl(fileName);
-          await supabase.from('menu_pool').update({ image_url: urlData.publicUrl }).eq('id', m.id);
-          setMenus(menus.map(x => x.id === m.id ? { ...x, image_url: urlData.publicUrl } : x));
-        }
-      }} />
-    </label>
-    <button style={styles.btnSmallRed} onClick={() => deleteMenu(m.id)}>Löschen</button>
-  </div>
-</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Menü-Liste */}
+      {isMobile ? (
+        // ── MOBILE: Cards ──
+        <div>
+          {menus.map(m => (
+            <div key={m.id} style={styles.mobileCard}>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
+                {m.image_url
+                  ? <img src={m.image_url} alt={m.title} style={{ width: 64, height: 64, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                  : <div style={{ width: 64, height: 64, borderRadius: 8, background: "#f5f5f4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: 24 }}>🍽️</span>
+                  </div>
+                }
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{m.title}</div>
+                  <div style={{ fontSize: 13, color: "#78716c", lineHeight: 1.4 }}>{m.description}</div>
+                </div>
+              </div>
+              {m.protein_options && m.protein_options !== "keine" && (
+                <div style={styles.mobileCardRow}>
+                  <span style={styles.mobileCardLabel}>Protein</span>
+                  <span>{m.protein_options.split(",").join(" / ")}</span>
+                </div>
+              )}
+              <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
+                <span style={styles.mobileCardLabel}>Vegetarisch möglich</span>
+                <span>{m.is_vegetarian_possible ? "✅ Ja" : "—"}</span>
+              </div>
+              <div style={styles.mobileCardActions}>
+                <label style={{ ...styles.btnSmall, cursor: "pointer" }}>
+                  📷 Bild ersetzen
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${Date.now()}.${fileExt}`;
+                    const { error } = await supabase.storage.from('menu-images').upload(fileName, file);
+                    if (!error) {
+                      const { data: urlData } = supabase.storage.from('menu-images').getPublicUrl(fileName);
+                      await supabase.from('menu_pool').update({ image_url: urlData.publicUrl }).eq('id', m.id);
+                      setMenus(menus.map(x => x.id === m.id ? { ...x, image_url: urlData.publicUrl } : x));
+                    }
+                  }} />
+                </label>
+                <button style={styles.btnSmallRed} onClick={() => deleteMenu(m.id)}>🗑️ Löschen</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        // ── DESKTOP: Tabelle ──
+        <div style={styles.tableWrapper}>
+          <table style={styles.table}>
+            <thead>
+              <tr>{["Titel", "Beschreibung", "Protein", "Vegetarisch", "Bild", "Aktionen"].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {menus.map(m => (
+                <tr key={m.id} style={styles.tr}>
+                  <td style={styles.td}><strong>{m.title}</strong></td>
+                  <td style={styles.td}>{m.description}</td>
+                  <td style={styles.td}>{m.protein_options === "keine" || !m.protein_options ? "—" : m.protein_options.split(",").join(" / ")}</td>
+                  <td style={styles.td}>{m.is_vegetarian_possible ? "✅" : "—"}</td>
+                  <td style={styles.td}>
+                    {m.image_url
+                      ? <img src={m.image_url} alt={m.title} style={{ height: 40, borderRadius: 4, objectFit: "cover" }} />
+                      : <span style={{ color: "#9ca3af", fontSize: 12 }}>Kein Bild</span>}
+                  </td>
+                  <td style={styles.td}>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <label style={{ ...styles.btnSmall, cursor: "pointer" }}>
+                        Bild
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const fileExt = file.name.split('.').pop();
+                          const fileName = `${Date.now()}.${fileExt}`;
+                          const { error } = await supabase.storage.from('menu-images').upload(fileName, file);
+                          if (!error) {
+                            const { data: urlData } = supabase.storage.from('menu-images').getPublicUrl(fileName);
+                            await supabase.from('menu_pool').update({ image_url: urlData.publicUrl }).eq('id', m.id);
+                            setMenus(menus.map(x => x.id === m.id ? { ...x, image_url: urlData.publicUrl } : x));
+                          }
+                        }} />
+                      </label>
+                      <button style={styles.btnSmallRed} onClick={() => deleteMenu(m.id)}>Löschen</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1223,11 +1641,13 @@ function AdminMenus() {
 // ============================================
 function AdminWeeklyMenus() {
   const { supabase } = useAuth();
+  const isMobile = useIsMobile();
   const [weeklyMenus, setWeeklyMenus] = useState([]);
   const [menuPool, setMenuPool] = useState([]);
   const [loading, setLoading] = useState(true);
   const { week, year } = getWeekNumber();
-function getWeekDates(weekNum, yearNum) {
+
+  function getWeekDates(weekNum, yearNum) {
     const jan4 = new Date(yearNum, 0, 4);
     const startOfWeek = new Date(jan4);
     startOfWeek.setDate(jan4.getDate() - (jan4.getDay() || 7) + 1 + (weekNum - 1) * 7);
@@ -1238,11 +1658,11 @@ function getWeekDates(weekNum, yearNum) {
     wednesday.setDate(startOfWeek.getDate() + 2);
     const toLocalISO = (d) => {
       const pad = n => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
     const toDateISO = (d) => {
       const pad = n => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     };
     return { deadline: toLocalISO(tuesday), delivery: toDateISO(wednesday) };
   }
@@ -1297,15 +1717,15 @@ function getWeekDates(weekNum, yearNum) {
     <div style={styles.pageContainer}>
       <h1 style={styles.pageTitle}>Wochenmenüs verwalten</h1>
 
+      {/* Formular */}
       <div style={styles.card}>
-        <div style={styles.pageHeaderRow}>
-          <h3>Menü für KW erfassen</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Menü für KW erfassen</h3>
           <button style={styles.btnSecondary} onClick={randomizeMenus} disabled={randomizing}>
-            🎲 {randomizing ? "Wird ausgewählt…" : "Zufällig auswählen"}
+            🎲 {randomizing ? "Wird ausgewählt…" : "Zufällig"}
           </button>
         </div>
-
-        <form onSubmit={saveWeeklyMenu} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }} className="admin-form-grid">
+        <form onSubmit={saveWeeklyMenu} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
           <div style={styles.inputGroup}>
             <label style={styles.label}>Kalenderwoche</label>
             <input type="number" style={styles.input} value={form.week_number}
@@ -1353,24 +1773,58 @@ function getWeekDates(weekNum, yearNum) {
         </form>
       </div>
 
-      <div style={styles.tableWrapper}>
-        <table style={styles.table}>
-          <thead><tr>{["KW", "Jahr", "Menü 1", "Menü 2", "Bestellfrist", "Lieferdatum", "Preis"].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr></thead>
-          <tbody>
-            {weeklyMenus.map(w => (
-              <tr key={w.id} style={styles.tr}>
-                <td style={styles.td}>{w.week_number}</td>
-                <td style={styles.td}>{w.year}</td>
-                <td style={styles.td}>{w.menu1?.title}</td>
-                <td style={styles.td}>{w.menu2?.title}</td>
-                <td style={styles.td}>{w.order_deadline ? new Date(w.order_deadline).toLocaleString("de-CH") : "—"}</td>
-                <td style={styles.td}>{w.delivery_date}</td>
-                <td style={styles.td}>CHF {parseFloat(w.price_per_menu).toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Wochenmenü-Liste */}
+      {isMobile ? (
+        // ── MOBILE: Cards ──
+        <div>
+          {weeklyMenus.map(w => (
+            <div key={w.id} style={styles.mobileCard}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={styles.weekBadge}>KW {w.week_number} / {w.year}</span>
+                <span style={{ fontWeight: 700, color: "#b45309" }}>CHF {parseFloat(w.price_per_menu).toFixed(2)}</span>
+              </div>
+              <div style={styles.mobileCardRow}>
+                <span style={styles.mobileCardLabel}>Menü 1</span>
+                <span style={styles.mobileCardValue}>{w.menu1?.title || "—"}</span>
+              </div>
+              <div style={styles.mobileCardRow}>
+                <span style={styles.mobileCardLabel}>Menü 2</span>
+                <span style={styles.mobileCardValue}>{w.menu2?.title || "—"}</span>
+              </div>
+              <div style={styles.mobileCardRow}>
+                <span style={styles.mobileCardLabel}>Bestellfrist</span>
+                <span style={{ fontSize: 13 }}>{w.order_deadline ? new Date(w.order_deadline).toLocaleString("de-CH") : "—"}</span>
+              </div>
+              <div style={{ ...styles.mobileCardRow, borderBottom: "none" }}>
+                <span style={styles.mobileCardLabel}>Lieferdatum</span>
+                <span>{w.delivery_date}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        // ── DESKTOP: Tabelle ──
+        <div style={styles.tableWrapper}>
+          <table style={styles.table}>
+            <thead>
+              <tr>{["KW", "Jahr", "Menü 1", "Menü 2", "Bestellfrist", "Lieferdatum", "Preis"].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {weeklyMenus.map(w => (
+                <tr key={w.id} style={styles.tr}>
+                  <td style={styles.td}>{w.week_number}</td>
+                  <td style={styles.td}>{w.year}</td>
+                  <td style={styles.td}>{w.menu1?.title}</td>
+                  <td style={styles.td}>{w.menu2?.title}</td>
+                  <td style={styles.td}>{w.order_deadline ? new Date(w.order_deadline).toLocaleString("de-CH") : "—"}</td>
+                  <td style={styles.td}>{w.delivery_date}</td>
+                  <td style={styles.td}>CHF {parseFloat(w.price_per_menu).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1394,23 +1848,23 @@ const styles = {
   // Layout
   appContainer: { minHeight: "100vh", background: "#fafaf9", fontFamily: "'Segoe UI', system-ui, sans-serif" },
   main: { maxWidth: 1200, margin: "0 auto", padding: "24px 16px" },
-  mainMobile: { padding: "16px 12px" },
+  mainMobile: { padding: "14px 12px" },
   pageContainer: { maxWidth: 1100, margin: "0 auto" },
-  pageHeader: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 },
+  pageHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 },
   pageHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  pageTitle: { fontSize: 26, fontWeight: 700, color: "#1c1917", margin: 0 },
+  pageTitle: { fontSize: 24, fontWeight: 700, color: "#1c1917", margin: 0 },
   weekBadge: { background: "#b45309", color: "#fff", padding: "4px 12px", borderRadius: 20, fontWeight: 700, fontSize: 14 },
 
   // Nav
-  nav: { background: "#292524", padding: "0 16px", display: "flex", alignItems: "center", gap: 16, height: 60, position: "sticky", top: 0, zIndex: 100 },
-  navBrand: { color: "#fff", fontWeight: 800, fontSize: 18, display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" },
+  nav: { background: "#292524", padding: "0 16px", display: "flex", alignItems: "center", gap: 16, height: 56, position: "sticky", top: 0, zIndex: 100 },
+  navBrand: { color: "#fff", fontWeight: 800, fontSize: 17, display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" },
   navLinks: { display: "flex", gap: 4, flex: 1 },
   navLink: { background: "none", border: "none", color: "#a8a29e", cursor: "pointer", padding: "8px 14px", borderRadius: 6, fontSize: 14, transition: "all .15s" },
   navLinkActive: { background: "#44403c", border: "none", color: "#fef3c7", cursor: "pointer", padding: "8px 14px", borderRadius: 6, fontSize: 14, fontWeight: 600 },
   navUser: { color: "#d6d3d1", fontSize: 13 },
   navRight: { display: "flex", alignItems: "center", gap: 12 },
   hamburger: { background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 22, padding: "8px", lineHeight: 1 },
-  mobileDropdown: { background: "#292524", position: "sticky", top: 60, zIndex: 99, display: "flex", flexDirection: "column", padding: "8px", gap: 2, borderBottom: "1px solid #3a3735" },
+  mobileDropdown: { background: "#292524", position: "sticky", top: 56, zIndex: 99, display: "flex", flexDirection: "column", padding: "8px", gap: 2, borderBottom: "1px solid #3a3735" },
   mobileNavLink: { background: "none", border: "none", color: "#a8a29e", cursor: "pointer", padding: "12px 16px", borderRadius: 8, fontSize: 15, textAlign: "left", fontWeight: 500 },
   mobileNavLinkActive: { background: "#44403c", border: "none", color: "#fef3c7", cursor: "pointer", padding: "12px 16px", borderRadius: 8, fontSize: 15, textAlign: "left", fontWeight: 700 },
 
@@ -1418,8 +1872,7 @@ const styles = {
   loginBg: { minHeight: "100vh", background: "linear-gradient(135deg, #78350f 0%, #451a03 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" },
   loginCard: { background: "#fff", borderRadius: 16, padding: "28px 20px", width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,.3)" },
   loginHeader: { textAlign: "center", marginBottom: 24 },
-  loginEmoji: { fontSize: 52 },
-  loginTitle: { fontSize: 28, fontWeight: 800, color: "#1c1917", margin: "8px 0 4px" },
+  loginTitle: { fontSize: 26, fontWeight: 800, color: "#1c1917", margin: "8px 0 4px" },
   loginSubtitle: { color: "#78716c", fontSize: 14 },
   tabRow: { display: "flex", background: "#f5f5f4", borderRadius: 8, padding: 4, marginBottom: 20 },
   tab: { flex: 1, padding: "8px", background: "none", border: "none", cursor: "pointer", borderRadius: 6, color: "#78716c", fontSize: 14 },
@@ -1431,24 +1884,23 @@ const styles = {
   label: { fontSize: 13, fontWeight: 600, color: "#44403c" },
   input: { padding: "12px 12px", border: "1.5px solid #e7e5e4", borderRadius: 8, fontSize: 16, outline: "none", background: "#fff", width: "100%" },
   select: { padding: "12px 12px", border: "1.5px solid #e7e5e4", borderRadius: 8, fontSize: 16, background: "#fff", cursor: "pointer", width: "100%" },
-  checkboxLabel: { display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" },
-  checkbox: { width: 16, height: 16, cursor: "pointer" },
-  radioRow: { display: "flex", gap: 16, marginTop: 6 },
+  checkboxLabel: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, cursor: "pointer", lineHeight: 1.5 },
+  checkbox: { width: 18, height: 18, cursor: "pointer", marginTop: 2, flexShrink: 0 },
+  radioRow: { display: "flex", gap: 12, marginTop: 6 },
   radioLabel: { display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 14 },
   hint: { fontSize: 12, color: "#9ca3af", textAlign: "center" },
 
   // Buttons
   btnPrimary: { padding: "14px 20px", background: "#b45309", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 16, transition: "opacity .15s" },
   btnSecondary: { padding: "12px 16px", background: "#e7e5e4", color: "#44403c", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 14 },
-  btnLogout: { padding: "8px 14px", background: "#44403c", color: "#d6d3d1", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 },
-  btnSmall: { padding: "7px 12px", background: "#b45309", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 },
-  btnSmallGreen: { padding: "7px 12px", background: "#15803d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 },
-  btnSmallRed: { padding: "7px 12px", background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 },
-  twintBtn: { display: "block", textAlign: "center", padding: "14px", background: "#00B4E6", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none", marginTop: 16 },
+  btnLogout: { padding: "8px 14px", background: "#44403c", color: "#d6d3d1", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" },
+  btnSmall: { padding: "7px 12px", background: "#b45309", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" },
+  btnSmallGreen: { padding: "7px 12px", background: "#15803d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" },
+  btnSmallRed: { padding: "7px 12px", background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" },
 
   // Menu cards
   menuGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 },
-  menuCard: { border: "2.5px solid #e7e5e4", borderRadius: 12, padding: 20, cursor: "pointer", background: "#fff", transition: "all .2s" },
+  menuCard: { border: "2.5px solid #e7e5e4", borderRadius: 12, padding: 16, cursor: "pointer", background: "#fff", transition: "all .2s" },
   menuCardSelected: { border: "2.5px solid #b45309", background: "#fff7ed" },
   menuCardNumber: { fontSize: 12, fontWeight: 700, color: "#b45309", textTransform: "uppercase", marginBottom: 6 },
   menuCardTitle: { fontSize: 18, fontWeight: 700, color: "#1c1917", margin: "0 0 8px" },
@@ -1460,7 +1912,7 @@ const styles = {
   priceRow: { display: "flex", justifyContent: "space-between", padding: "14px 0", borderTop: "1px solid #e7e5e4", fontSize: 16, marginBottom: 16 },
 
   // Success / order
-  successCard: { background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 12, padding: 24 },
+  successCard: { background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 12, padding: 20 },
   orderSummary: { background: "#fff", borderRadius: 10, padding: 16, margin: "16px 0" },
   orderRow: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f5f5f4", fontSize: 14 },
 
@@ -1470,14 +1922,20 @@ const styles = {
   warningBox: { background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", padding: "12px 16px", borderRadius: 8, marginBottom: 16, fontSize: 14 },
   emptyState: { textAlign: "center", padding: "60px 20px", color: "#9ca3af" },
 
-  // Table
+  // Table (Desktop)
   tableWrapper: { background: "#fff", borderRadius: 12, overflow: "auto", border: "1px solid #e7e5e4", marginTop: 16 },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
   th: { background: "#f5f5f4", padding: "12px 14px", textAlign: "left", fontWeight: 700, color: "#44403c", borderBottom: "1px solid #e7e5e4", whiteSpace: "nowrap" },
   td: { padding: "11px 14px", borderBottom: "1px solid #f5f5f4", color: "#1c1917", verticalAlign: "middle" },
   tr: { transition: "background .1s" },
   totalRow: { padding: "12px 16px", textAlign: "right", borderTop: "2px solid #e7e5e4", fontSize: 16 },
-  filterRow: { display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 16, flexWrap: "wrap" },
+
+  // Mobile card views
+  mobileCard: { background: "#fff", borderRadius: 12, padding: 16, border: "1px solid #e7e5e4", marginBottom: 12 },
+  mobileCardRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #f5f5f4", fontSize: 14, gap: 8 },
+  mobileCardLabel: { color: "#78716c", fontSize: 13, flexShrink: 0 },
+  mobileCardValue: { fontWeight: 600, color: "#1c1917", textAlign: "right" },
+  mobileCardActions: { display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" },
 
   // Misc
   card: { background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #e7e5e4", marginBottom: 16 },
