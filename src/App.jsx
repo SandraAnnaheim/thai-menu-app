@@ -63,6 +63,53 @@ function isOrderingOpen(deadline) {
   return new Date() < new Date(deadline);
 }
 
+function getOrderingWeek() {
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=So, 1=Mo, 2=Di, 3=Mi, 4=Do, 5=Fr, 6=Sa
+  if (dayOfWeek >= 3) {
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+    return getWeekNumber(nextWeek);
+  }
+  return getWeekNumber(today);
+}
+
+// ============================================
+// MOBILE HOOK
+// ============================================
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
+
+// ============================================
+// GLOBAL RESPONSIVE STYLES
+// ============================================
+function GlobalStyles() {
+  return (
+    <style>{`
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      input, select, button, textarea { font-size: 16px !important; }
+      @media (max-width: 767px) {
+        .menu-grid { grid-template-columns: 1fr !important; }
+        .admin-form-grid { grid-template-columns: 1fr !important; }
+        .page-header-row { flex-wrap: wrap; gap: 8px; }
+        .filter-row { flex-direction: column; align-items: stretch !important; }
+        .filter-row label { margin-top: 4px; }
+        .filter-row input, .filter-row select { width: 100% !important; }
+        .mobile-stack { flex-direction: column; }
+        .add-menu-form { flex-direction: column !important; }
+      }
+    `}</style>
+  );
+}
+
 // ============================================
 // HAUPTAPP
 // ============================================
@@ -78,12 +125,12 @@ function AppRouter() {
   const { user, profile, loading } = useAuth();
   const [page, setPage] = useState("home");
 
-  if (loading) return <LoadingScreen />;
-  if (!user) return <LoginPage />;
-  if (!profile?.is_approved) return <PendingApprovalPage />;
-if (profile?.is_admin) return <AdminLayout page={page} setPage={setPage} />;
-if (profile?.is_contact && !profile?.is_admin) return <ContactLayout page={page} setPage={setPage} />;
-return <UserLayout page={page} setPage={setPage} />;
+  if (loading) return <><GlobalStyles /><LoadingScreen /></>;
+  if (!user) return <><GlobalStyles /><LoginPage /></>;
+  if (!profile?.is_approved) return <><GlobalStyles /><PendingApprovalPage /></>;
+if (profile?.is_admin) return <><GlobalStyles /><AdminLayout page={page} setPage={setPage} /></>;
+if (profile?.is_contact && !profile?.is_admin) return <><GlobalStyles /><ContactLayout page={page} setPage={setPage} /></>;
+return <><GlobalStyles /><UserLayout page={page} setPage={setPage} /></>;
 }
 
 // ============================================
@@ -155,9 +202,8 @@ if (data.user) {
     <div style={styles.loginBg}>
       <div style={styles.loginCard}>
         <div style={styles.loginHeader}>
-          <div style={styles.loginEmoji}>🍜</div>
-          <h1 style={styles.loginTitle}>Thai Menü</h1>
-          <p style={styles.loginSubtitle}>Mittagessen bestellen</p>
+          <h1 style={styles.loginTitle}>Pia's Thai-Kitchen</h1>
+          <p style={styles.loginSubtitle}>Thai-Menüs bestellen</p>
         </div>
 
         <div style={styles.tabRow}>
@@ -182,8 +228,8 @@ if (data.user) {
   <label style={styles.label}>Passwort (min. 6 Zeichen)</label>
   <div style={{ position: "relative" }}>
     <input style={styles.input} type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required />
-    <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>
-      {showPassword ? "🙈" : "👁️"}
+    <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 12 }}>
+      {showPassword ? <em>Passwort verbergen</em> : <em>Passwort anzeigen</em>}
     </button>
   </div>
 </div>
@@ -238,21 +284,44 @@ function PendingApprovalPage() {
 // ============================================
 function UserLayout({ page, setPage }) {
   const { profile, supabase } = useAuth();
+  const isMobile = useIsMobile();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const pages = { home: <OrderPage setPage={setPage} />, history: <OrderHistory /> };
+  const navItems = [["home", "Bestellen"], ["history", "Meine Bestellungen"]];
   return (
     <div style={styles.appContainer}>
       <nav style={styles.nav}>
-        <div style={styles.navBrand}> <span>Thai Menü</span></div>
-        <div style={styles.navLinks}>
-          <button style={page === "home" ? styles.navLinkActive : styles.navLink} onClick={() => setPage("home")}>Bestellen</button>
-          <button style={page === "history" ? styles.navLinkActive : styles.navLink} onClick={() => setPage("history")}>Meine Bestellungen</button>
-        </div>
-        <div style={styles.navRight}>
-          <span style={styles.navUser}>{profile?.full_name}</span>
-          <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
-        </div>
+        <div style={styles.navBrand}><span>Thai Menü</span></div>
+        {isMobile ? (
+          <>
+            <div style={{ flex: 1 }} />
+            <button style={styles.hamburger} onClick={() => setMobileOpen(o => !o)}>{mobileOpen ? "✕" : "☰"}</button>
+            <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
+          </>
+        ) : (
+          <>
+            <div style={styles.navLinks}>
+              {navItems.map(([k, v]) => (
+                <button key={k} style={page === k ? styles.navLinkActive : styles.navLink} onClick={() => setPage(k)}>{v}</button>
+              ))}
+            </div>
+            <div style={styles.navRight}>
+              <span style={styles.navUser}>{profile?.full_name}</span>
+              <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
+            </div>
+          </>
+        )}
       </nav>
-      <main style={styles.main}>{pages[page] || <OrderPage />}</main>
+      {isMobile && mobileOpen && (
+        <div style={styles.mobileDropdown}>
+          {navItems.map(([k, v]) => (
+            <button key={k} style={page === k ? styles.mobileNavLinkActive : styles.mobileNavLink}
+              onClick={() => { setPage(k); setMobileOpen(false); }}>{v}</button>
+          ))}
+          <div style={{ padding: "8px 12px", color: "#a8a29e", fontSize: 13, borderTop: "1px solid #3a3735" }}>{profile?.full_name}</div>
+        </div>
+      )}
+      <main style={isMobile ? styles.mainMobile : styles.main}>{pages[page] || <OrderPage />}</main>
     </div>
   );
 }
@@ -262,25 +331,49 @@ function UserLayout({ page, setPage }) {
 // ============================================
 function ContactLayout({ page, setPage }) {
   const { supabase, profile } = useAuth();
+  const isMobile = useIsMobile();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const navItems = [["orders", "Bestellungen"], ["home", "Bestellen"], ["history", "Meine Bestellungen"]];
   return (
     <div style={styles.appContainer}>
       <nav style={{ ...styles.nav, background: "#1c1917" }}>
-        <div style={styles.navBrand}> <span style={{ color: "#f59e0b" }}>{profile?.companies?.name}</span></div>
-<div style={styles.navLinks}>
- <button style={page === "orders" ? styles.navLinkActive : styles.navLink} onClick={() => setPage("orders")}>📋 Bestellungen</button>
-<button style={page === "home" ? styles.navLinkActive : styles.navLink} onClick={() => setPage("home")}>🍜 Bestellen</button>
-<button style={page === "history" ? styles.navLinkActive : styles.navLink} onClick={() => setPage("history")}>📜 Meine Bestellungen</button>
-</div>
-        <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
+        <div style={styles.navBrand}><span style={{ color: "#f59e0b" }}>{profile?.companies?.name}</span></div>
+        {isMobile ? (
+          <>
+            <div style={{ flex: 1 }} />
+            <button style={styles.hamburger} onClick={() => setMobileOpen(o => !o)}>{mobileOpen ? "✕" : "☰"}</button>
+            <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
+          </>
+        ) : (
+          <>
+            <div style={styles.navLinks}>
+              {navItems.map(([k, v]) => (
+                <button key={k} style={page === k ? styles.navLinkActive : styles.navLink} onClick={() => setPage(k)}>{v}</button>
+              ))}
+            </div>
+            <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
+          </>
+        )}
       </nav>
-<main style={styles.main}>
-{page === "home" ? <OrderPage setPage={setPage} /> : page === "history" ? <OrderHistory /> : <ContactOrders />}
-</main>
+      {isMobile && mobileOpen && (
+        <div style={{ ...styles.mobileDropdown, background: "#1c1917" }}>
+          {navItems.map(([k, v]) => (
+            <button key={k} style={page === k ? styles.mobileNavLinkActive : styles.mobileNavLink}
+              onClick={() => { setPage(k); setMobileOpen(false); }}>{v}</button>
+          ))}
+        </div>
+      )}
+      <main style={isMobile ? styles.mainMobile : styles.main}>
+        {page === "home" ? <OrderPage setPage={setPage} /> : page === "history" ? <OrderHistory /> : <ContactOrders />}
+      </main>
     </div>
   );
 }
 function AdminLayout({ page, setPage }) {
   const { supabase } = useAuth();
+  const isMobile = useIsMobile();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const navItems = [["orders", "Bestellungen"], ["weekly", "Wochenmenüs"], ["menus", "Menü-Pool"], ["users", "Benutzer"]];
   const adminPages = {
     orders: <AdminOrders />,
     users: <AdminUsers />,
@@ -290,15 +383,33 @@ function AdminLayout({ page, setPage }) {
   return (
     <div style={styles.appContainer}>
       <nav style={{ ...styles.nav, background: "#1c1917" }}>
-        <div style={styles.navBrand}> <span style={{ color: "#f59e0b" }}>Admin</span></div>
-        <div style={styles.navLinks}>
-          {[["orders", "📋 Bestellungen"], ["weekly", "📅 Wochenmenüs"], ["menus", "🍽️ Menü-Pool"], ["users", "👥 Benutzer"]].map(([k, v]) => (
-            <button key={k} style={page === k ? styles.navLinkActive : styles.navLink} onClick={() => setPage(k)}>{v}</button>
+        <div style={styles.navBrand}><span style={{ color: "#f59e0b" }}>Admin</span></div>
+        {isMobile ? (
+          <>
+            <div style={{ flex: 1 }} />
+            <button style={styles.hamburger} onClick={() => setMobileOpen(o => !o)}>{mobileOpen ? "✕" : "☰"}</button>
+            <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
+          </>
+        ) : (
+          <>
+            <div style={styles.navLinks}>
+              {navItems.map(([k, v]) => (
+                <button key={k} style={page === k ? styles.navLinkActive : styles.navLink} onClick={() => setPage(k)}>{v}</button>
+              ))}
+            </div>
+            <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
+          </>
+        )}
+      </nav>
+      {isMobile && mobileOpen && (
+        <div style={{ ...styles.mobileDropdown, background: "#1c1917" }}>
+          {navItems.map(([k, v]) => (
+            <button key={k} style={page === k ? styles.mobileNavLinkActive : styles.mobileNavLink}
+              onClick={() => { setPage(k); setMobileOpen(false); }}>{v}</button>
           ))}
         </div>
-        <button style={styles.btnLogout} onClick={() => supabase.auth.signOut()}>Abmelden</button>
-      </nav>
-      <main style={styles.main}>{adminPages[page] || <AdminOrders />}</main>
+      )}
+      <main style={isMobile ? styles.mainMobile : styles.main}>{adminPages[page] || <AdminOrders />}</main>
     </div>
   );
 }
@@ -320,7 +431,7 @@ function OrderPage({ setPage }) {
   const [existingOrder, setExistingOrder] = useState(null);
   const [twintInfo, setTwintInfo] = useState(null);
 const open = isOrderingOpen(weeklyMenu?.order_deadline);
-  const { week, year } = getWeekNumber();
+const { week, year } = getOrderingWeek();
 
   useEffect(() => {
     loadWeeklyMenu();
@@ -386,13 +497,15 @@ protein_choice: !isVegetarian ? autoProtein : null,
     setSuccess(true);
     // Twint Deeplink
 setTwintInfo({ 
-  phone: profile?.companies?.twint_phone || "", 
+  phone: profile?.companies?.twint_phone || "",
+  contact: profile?.companies?.contact_person || "",
   amount: weeklyMenu.price_per_menu 
 });
     setSubmitting(false);
   }
 
   if (loading) return <LoadingScreen />;
+  const isMobile = window.innerWidth < 768;
 
   return (
     <div style={styles.pageContainer}>
@@ -403,7 +516,7 @@ setTwintInfo({
 
       {!open && (
         <div style={styles.warningBox}>
-          ⏰ Die Bestellfrist für diese Woche ist abgelaufen (Montag 12:00 Uhr).
+ ⏰ Die Bestellfrist für KW {week} ist abgelaufen (Dienstag 13:00 Uhr).
         </div>
       )}
 
@@ -416,7 +529,7 @@ setTwintInfo({
 <ExistingOrderCard order={existingOrder} weeklyMenu={weeklyMenu} twintInfo={twintInfo} setPage={setPage} />
       ) : (
         <form onSubmit={handleOrder}>
-          <div style={styles.menuGrid}>
+          <div style={styles.menuGrid} className="menu-grid">
             <MenuCard
               number={1}
               menu={weeklyMenu.menu1}
@@ -635,17 +748,26 @@ function ContactOrders() {
   const { supabase, profile } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { week, year } = getWeekNumber();
+  const [openWeeks, setOpenWeeks] = useState({});
 
   useEffect(() => { loadOrders(); }, []);
 
   async function loadOrders() {
     setLoading(true);
-    const { data } = await supabase.from("order_summary").select("*")
-      .eq("week_number", week).eq("year", year)
+    const { data } = await supabase
+      .from("order_summary")
+      .select("*")
       .eq("company_name", profile?.companies?.name)
+      .order("year", { ascending: false })
+      .order("week_number", { ascending: false })
       .order("full_name");
     setOrders(data || []);
+
+    // Neueste KW automatisch aufklappen
+    if (data && data.length > 0) {
+      const firstKey = `${data[0].year}-${data[0].week_number}`;
+      setOpenWeeks({ [firstKey]: true });
+    }
     setLoading(false);
   }
 
@@ -659,51 +781,93 @@ function ContactOrders() {
     loadOrders();
   }
 
+  function toggleWeek(key) {
+    setOpenWeeks(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  // Bestellungen nach KW gruppieren
+  const grouped = {};
+  orders.forEach(o => {
+    const key = `${o.year}-${o.week_number}`;
+    if (!grouped[key]) grouped[key] = { week: o.week_number, year: o.year, orders: [] };
+    grouped[key].orders.push(o);
+  });
+  const weeks = Object.values(grouped);
+
   if (loading) return <LoadingScreen />;
 
   return (
     <div style={styles.pageContainer}>
-      <div style={styles.pageHeaderRow}>
-        <h1 style={styles.pageTitle}>Bestellungen KW {week}</h1>
-      </div>
-      <div style={styles.tableWrapper}>
-        <table style={styles.table}>
-          <thead>
-            <tr>{["Name", "Menü", "Vegi", "Protein", "Lunchbox ↩", "Preis", "Bezahlt", "Aktionen"].map(h => (
-              <th key={h} style={styles.th}>{h}</th>
-            ))}</tr>
-          </thead>
-          <tbody>
-            {orders.map(o => (
-              <tr key={o.id} style={styles.tr}>
-                <td style={styles.td}>{o.full_name}</td>
-                <td style={styles.td}>Menü {o.menu_choice}: {o.menu_title}</td>
-                <td style={styles.td}>{o.is_vegetarian ? "✅" : "—"}</td>
-                <td style={styles.td}>{o.protein_choice || "—"}</td>
-                <td style={styles.td}>{o.lunchbox_returned ? "✅" : o.lunchbox_requested ? "⏳" : "—"}</td>
-                <td style={styles.td}>CHF {parseFloat(o.total_price).toFixed(2)}</td>
-                <td style={styles.td}>{o.payment_status === "paid" ? "✅" : "⏳"}</td>
-                <td style={styles.td}>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {o.payment_status !== "paid" && (
-                      <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>💰 Bezahlt</button>
-                    )}
-                    {o.lunchbox_requested && !o.lunchbox_returned && (
-                      <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>📦 Zurück</button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {orders.length === 0 && (
-              <tr><td colSpan={9} style={{ ...styles.td, textAlign: "center", color: "#9ca3af" }}>Keine Bestellungen gefunden.</td></tr>
-            )}
-          </tbody>
-        </table>
-        <div style={styles.totalRow}>
-          <strong>Total: CHF {orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0).toFixed(2)}</strong>
+      <h1 style={styles.pageTitle}>Bestellübersicht</h1>
+
+      {weeks.length === 0 && (
+        <div style={styles.emptyState}>
+          <div style={{ fontSize: 48 }}>📭</div>
+          <p>Noch keine Bestellungen vorhanden.</p>
         </div>
-      </div>
+      )}
+
+      {weeks.map(({ week, year, orders: weekOrders }) => {
+        const key = `${year}-${week}`;
+        const isOpen = !!openWeeks[key];
+        const total = weekOrders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+
+        return (
+          <div key={key} style={{ background: "#fff", border: "1px solid #e7e5e4", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}>
+            {/* Header / Klappzeile */}
+            <div
+              onClick={() => toggleWeek(key)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", cursor: "pointer", background: isOpen ? "#fff7ed" : "#fff", borderBottom: isOpen ? "1px solid #e7e5e4" : "none" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 18 }}>{isOpen ? "▾" : "▸"}</span>
+                <strong style={{ fontSize: 16, color: "#1c1917" }}>KW {week} / {year}</strong>
+                <span style={{ background: "#f5f5f4", color: "#78716c", borderRadius: 20, padding: "2px 10px", fontSize: 13 }}>{weekOrders.length} Bestellung{weekOrders.length !== 1 ? "en" : ""}</span>
+              </div>
+              <span style={{ fontWeight: 700, color: "#b45309" }}>CHF {total.toFixed(2)}</span>
+            </div>
+
+            {/* Tabelle (ausgeklappt) */}
+            {isOpen && (
+              <div style={styles.tableWrapper}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>{["Name", "Menü", "Vegi", "Protein", "Lunchbox ↩", "Preis", "Bezahlt", "Aktionen"].map(h => (
+                      <th key={h} style={styles.th}>{h}</th>
+                    ))}</tr>
+                  </thead>
+                  <tbody>
+                    {weekOrders.map(o => (
+                      <tr key={o.id} style={styles.tr}>
+                        <td style={styles.td}>{o.full_name}</td>
+                        <td style={styles.td}>Menü {o.menu_choice}: {o.menu_title}</td>
+                        <td style={styles.td}>{o.is_vegetarian ? "✅" : "—"}</td>
+                        <td style={styles.td}>{o.protein_choice || "—"}</td>
+                        <td style={styles.td}>{o.lunchbox_returned ? "✅" : o.lunchbox_requested ? "⏳" : "—"}</td>
+                        <td style={styles.td}>CHF {parseFloat(o.total_price).toFixed(2)}</td>
+                        <td style={styles.td}>{o.payment_status === "paid" ? "✅" : "⏳"}</td>
+                        <td style={styles.td}>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            {o.payment_status !== "paid" && (
+                              <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>💰 Bezahlt</button>
+                            )}
+                            {o.lunchbox_requested && !o.lunchbox_returned && (
+                              <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>📦 Zurück</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={styles.totalRow}>
+                  <strong>Total: CHF {total.toFixed(2)}</strong>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -797,12 +961,12 @@ head: [["Name", "Menü", "Vegi", "Protein"]],
 
   return (
     <div style={styles.pageContainer}>
-      <div style={styles.pageHeaderRow}>
+      <div style={styles.pageHeaderRow} className="page-header-row">
         <h1 style={styles.pageTitle}>Bestellungen</h1>
         <button style={styles.btnPrimary} onClick={exportPDF}>📄 PDF exportieren</button>
       </div>
 
-      <div style={styles.filterRow}>
+      <div style={styles.filterRow} className="filter-row">
         <label style={styles.label}>KW:</label>
         <input type="number" value={filterWeek} onChange={e => setFilterWeek(Number(e.target.value))} style={{ ...styles.input, width: 70 }} min={1} max={53} />
         <label style={styles.label}>Jahr:</label>
@@ -840,7 +1004,7 @@ head: [["Name", "Menü", "Vegi", "Protein"]],
                         <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>💰 Bezahlt</button>
                       )}
                       {o.lunchbox_requested && !o.lunchbox_returned && (
-                        <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>📦 Zurück</button>
+                        <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>Lunchbox zurück</button>
                       )}
                     </div>
                   </td>
@@ -974,7 +1138,7 @@ function AdminMenus() {
       <h1 style={styles.pageTitle}>Menü-Pool verwalten</h1>
       <div style={styles.card}>
         <h3 style={{ marginBottom: 16 }}>Neues Menü hinzufügen</h3>
-        <form onSubmit={addMenu} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <form onSubmit={addMenu} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }} className="add-menu-form">
 <Input label="Titel" value={newMenu.title} onChange={e => setNewMenu({ ...newMenu, title: e.target.value })} required style={{ flex: 1, minWidth: 160 }} />
 <Input label="Beschreibung" value={newMenu.description} onChange={e => setNewMenu({ ...newMenu, description: e.target.value })} style={{ flex: 2, minWidth: 200 }} />
 <div style={styles.inputGroup}>
@@ -1137,7 +1301,7 @@ function getWeekDates(weekNum, yearNum) {
           </button>
         </div>
 
-        <form onSubmit={saveWeeklyMenu} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
+        <form onSubmit={saveWeeklyMenu} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }} className="admin-form-grid">
           <div style={styles.inputGroup}>
             <label style={styles.label}>Kalenderwoche</label>
             <input type="number" style={styles.input} value={form.week_number}
@@ -1226,6 +1390,7 @@ const styles = {
   // Layout
   appContainer: { minHeight: "100vh", background: "#fafaf9", fontFamily: "'Segoe UI', system-ui, sans-serif" },
   main: { maxWidth: 1200, margin: "0 auto", padding: "24px 16px" },
+  mainMobile: { padding: "16px 12px" },
   pageContainer: { maxWidth: 1100, margin: "0 auto" },
   pageHeader: { display: "flex", alignItems: "center", gap: 12, marginBottom: 24 },
   pageHeaderRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
@@ -1233,17 +1398,21 @@ const styles = {
   weekBadge: { background: "#b45309", color: "#fff", padding: "4px 12px", borderRadius: 20, fontWeight: 700, fontSize: 14 },
 
   // Nav
-  nav: { background: "#292524", padding: "0 24px", display: "flex", alignItems: "center", gap: 24, height: 60, position: "sticky", top: 0, zIndex: 100 },
+  nav: { background: "#292524", padding: "0 16px", display: "flex", alignItems: "center", gap: 16, height: 60, position: "sticky", top: 0, zIndex: 100 },
   navBrand: { color: "#fff", fontWeight: 800, fontSize: 18, display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" },
   navLinks: { display: "flex", gap: 4, flex: 1 },
   navLink: { background: "none", border: "none", color: "#a8a29e", cursor: "pointer", padding: "8px 14px", borderRadius: 6, fontSize: 14, transition: "all .15s" },
   navLinkActive: { background: "#44403c", border: "none", color: "#fef3c7", cursor: "pointer", padding: "8px 14px", borderRadius: 6, fontSize: 14, fontWeight: 600 },
   navUser: { color: "#d6d3d1", fontSize: 13 },
   navRight: { display: "flex", alignItems: "center", gap: 12 },
+  hamburger: { background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 22, padding: "8px", lineHeight: 1 },
+  mobileDropdown: { background: "#292524", position: "sticky", top: 60, zIndex: 99, display: "flex", flexDirection: "column", padding: "8px", gap: 2, borderBottom: "1px solid #3a3735" },
+  mobileNavLink: { background: "none", border: "none", color: "#a8a29e", cursor: "pointer", padding: "12px 16px", borderRadius: 8, fontSize: 15, textAlign: "left", fontWeight: 500 },
+  mobileNavLinkActive: { background: "#44403c", border: "none", color: "#fef3c7", cursor: "pointer", padding: "12px 16px", borderRadius: 8, fontSize: 15, textAlign: "left", fontWeight: 700 },
 
   // Login
-  loginBg: { minHeight: "100vh", background: "linear-gradient(135deg, #78350f 0%, #451a03 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
-  loginCard: { background: "#fff", borderRadius: 16, padding: 36, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,.3)" },
+  loginBg: { minHeight: "100vh", background: "linear-gradient(135deg, #78350f 0%, #451a03 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px" },
+  loginCard: { background: "#fff", borderRadius: 16, padding: "28px 20px", width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,.3)" },
   loginHeader: { textAlign: "center", marginBottom: 24 },
   loginEmoji: { fontSize: 52 },
   loginTitle: { fontSize: 28, fontWeight: 800, color: "#1c1917", margin: "8px 0 4px" },
@@ -1256,8 +1425,8 @@ const styles = {
   form: { display: "flex", flexDirection: "column", gap: 12 },
   inputGroup: { display: "flex", flexDirection: "column", gap: 4 },
   label: { fontSize: 13, fontWeight: 600, color: "#44403c" },
-  input: { padding: "10px 12px", border: "1.5px solid #e7e5e4", borderRadius: 8, fontSize: 14, outline: "none", background: "#fff" },
-  select: { padding: "10px 12px", border: "1.5px solid #e7e5e4", borderRadius: 8, fontSize: 14, background: "#fff", cursor: "pointer" },
+  input: { padding: "12px 12px", border: "1.5px solid #e7e5e4", borderRadius: 8, fontSize: 16, outline: "none", background: "#fff", width: "100%" },
+  select: { padding: "12px 12px", border: "1.5px solid #e7e5e4", borderRadius: 8, fontSize: 16, background: "#fff", cursor: "pointer", width: "100%" },
   checkboxLabel: { display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" },
   checkbox: { width: 16, height: 16, cursor: "pointer" },
   radioRow: { display: "flex", gap: 16, marginTop: 6 },
@@ -1265,12 +1434,12 @@ const styles = {
   hint: { fontSize: 12, color: "#9ca3af", textAlign: "center" },
 
   // Buttons
-  btnPrimary: { padding: "12px 20px", background: "#b45309", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 15, transition: "opacity .15s" },
-  btnSecondary: { padding: "10px 16px", background: "#e7e5e4", color: "#44403c", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 14 },
-  btnLogout: { padding: "7px 14px", background: "#44403c", color: "#d6d3d1", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 },
-  btnSmall: { padding: "5px 10px", background: "#b45309", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 },
-  btnSmallGreen: { padding: "5px 10px", background: "#15803d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 },
-  btnSmallRed: { padding: "5px 10px", background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 },
+  btnPrimary: { padding: "14px 20px", background: "#b45309", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 16, transition: "opacity .15s" },
+  btnSecondary: { padding: "12px 16px", background: "#e7e5e4", color: "#44403c", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 14 },
+  btnLogout: { padding: "8px 14px", background: "#44403c", color: "#d6d3d1", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 },
+  btnSmall: { padding: "7px 12px", background: "#b45309", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 },
+  btnSmallGreen: { padding: "7px 12px", background: "#15803d", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 },
+  btnSmallRed: { padding: "7px 12px", background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600 },
   twintBtn: { display: "block", textAlign: "center", padding: "14px", background: "#00B4E6", color: "#fff", borderRadius: 10, fontWeight: 700, textDecoration: "none", marginTop: 16 },
 
   // Menu cards
