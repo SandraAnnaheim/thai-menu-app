@@ -667,7 +667,7 @@ function TwintPayment({ twintInfo, weekNumber }) {
       </div>
       {isMobileDevice ? (
         <a href={deeplink} style={{ display: "block", background: "#fff", color: "#00B4E6", padding: "12px 20px", borderRadius: 8, fontWeight: 700, fontSize: 15, textDecoration: "none" }}>
-          👆 Twint App öffnen
+          Twint App öffnen
         </a>
       ) : (
         <div style={{ color: "#fff", fontSize: 14 }} />
@@ -705,7 +705,7 @@ function ExistingOrderCard({ order, weeklyMenu, twintInfo, setPage, onNewOrder }
       )}
       {paidConfirmed && (
         <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: 16, marginTop: 12, textAlign: "center" }}>
-          <div style={{ fontSize: 32 }}>🙏</div>
+          <div style={{ fontSize: 32 }}></div>
           <div style={{ fontWeight: 700, color: "#15803d", marginBottom: 4 }}>Danke für deine Zahlung!</div>
           <div style={{ fontSize: 13, color: "#166534", marginBottom: 16 }}>Die Zahlung wird von uns überprüft und bestätigt.</div>
           <button style={styles.btnSecondary} onClick={() => setPage("history")}>
@@ -766,7 +766,7 @@ function OrderHistory() {
     <div style={styles.pageContainer}>
       <h1 style={styles.pageTitle}>Meine Bestellungen</h1>
       {orders.length === 0 ? (
-        <div style={styles.emptyState}><div style={{ fontSize: 48 }}>📭</div><p>Noch keine Bestellungen.</p></div>
+        <div style={styles.emptyState}><div style={{ fontSize: 48 }}></div><p>Noch keine Bestellungen.</p></div>
       ) : isMobile ? (
         // ── MOBILE: Card-Ansicht ──
         <div>
@@ -898,7 +898,7 @@ function OrderHistory() {
                         <div style={{ display: "flex", gap: 6 }}>
                           <button style={styles.btnSmall} onClick={() => setEditOrder({ ...o })}>Bearbeiten</button>
                           <button style={{ ...styles.btnSmallRed, opacity: deleting === o.id ? 0.5 : 1 }}
-                            onClick={() => handleDelete(o)}>🗑️</button>
+                            onClick={() => handleDelete(o)}>Löschen</button>
                         </div>
                       )}
                       {isEditing && (
@@ -982,7 +982,7 @@ function ContactOrders() {
 
       {weeks.length === 0 && (
         <div style={styles.emptyState}>
-          <div style={{ fontSize: 48 }}>📭</div>
+          <div style={{ fontSize: 48 }}></div>
           <p>Noch keine Bestellungen vorhanden.</p>
         </div>
       )}
@@ -1032,7 +1032,7 @@ function ContactOrders() {
                         </div>
                       )}
                       <div style={styles.mobileCardRow}>
-                        <span style={styles.mobileCardLabel}>Lunchbox ↩</span>
+                        <span style={styles.mobileCardLabel}>Lunchbox zurück</span>
                         <span style={{ color: o.lunchbox_returned ? "#15803d" : o.lunchbox_requested ? "#92400e" : "#6b7280" }}>
                           {o.lunchbox_returned ? "Zurück" : o.lunchbox_requested ? "Ausstehend" : "—"}
                         </span>
@@ -1052,7 +1052,7 @@ function ContactOrders() {
                           <button style={styles.btnSmall} onClick={() => markPaid(o.id)}>✅ Bezahlt</button>
                         )}
                         {o.lunchbox_requested && !o.lunchbox_returned && (
-                          <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>📦 Zurück</button>
+                          <button style={{ ...styles.btnSmall, background: "#065f46" }} onClick={() => markLunchboxReturned(o.id)}>Zurück</button>
                         )}
                       </div>
                     </div>
@@ -1066,7 +1066,7 @@ function ContactOrders() {
                 <div style={styles.tableWrapper}>
                   <table style={styles.table}>
                     <thead>
-                      <tr>{["Name", "Menü", "Vegi", "Protein", "Lunchbox ↩", "Preis", "Bezahlt", "Aktionen"].map(h => (
+                      <tr>{["Name", "Menü", "Vegi", "Protein", "Lunchbox zurück", "Preis", "Bezahlt", "Aktionen"].map(h => (
                         <th key={h} style={styles.th}>{h}</th>
                       ))}</tr>
                     </thead>
@@ -1260,7 +1260,7 @@ function AdminOrders() {
                   <span>{o.lunchbox_requested ? "Ja" : "—"}</span>
                 </div>
                 <div style={styles.mobileCardRow}>
-                  <span style={styles.mobileCardLabel}>Lunchbox ↩</span>
+                  <span style={styles.mobileCardLabel}>Lunchbox zurück</span>
                   <span style={{ color: o.lunchbox_returned ? "#15803d" : o.lunchbox_requested ? "#92400e" : "#6b7280" }}>
                     {o.lunchbox_returned ? "Zurück" : o.lunchbox_requested ? "Ausstehend" : "—"}
                   </span>
@@ -1296,7 +1296,7 @@ function AdminOrders() {
           <div style={styles.tableWrapper}>
             <table style={styles.table}>
               <thead>
-                <tr>{["Firma", "Name", "Menü", "Vegi", "Protein", "Lunchbox", "Lunchbox ↩", "Preis", "Bezahlt", "Aktionen"].map(h => (
+                <tr>{["Firma", "Name", "Menü", "Vegi", "Protein", "Lunchbox", "Lunchbox zurück", "Preis", "Bezahlt", "Aktionen"].map(h => (
                   <th key={h} style={styles.th}>{h}</th>
                 ))}</tr>
               </thead>
@@ -1410,7 +1410,7 @@ function AdminUsers() {
                   </button>
                   <button style={u.is_admin ? styles.btnSmallGreen : styles.btnSmall}
                     onClick={() => toggleAdmin(u.id, u.is_admin)}>
-                    {u.is_admin ? "👑 Admin" : "— Admin"}
+                    {u.is_admin ? "Admin" : "— Admin"}
                   </button>
                 </div>
               </div>
@@ -1568,7 +1568,7 @@ function AdminMenus() {
               </div>
               <div style={styles.mobileCardActions}>
                 <label style={{ ...styles.btnSmall, cursor: "pointer" }}>
-                  📷 Bild ersetzen
+                  Bild ersetzen
                   <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
@@ -1582,7 +1582,7 @@ function AdminMenus() {
                     }
                   }} />
                 </label>
-                <button style={styles.btnSmallRed} onClick={() => deleteMenu(m.id)}>🗑️ Löschen</button>
+                <button style={styles.btnSmallRed} onClick={() => deleteMenu(m.id)}>Löschen</button>
               </div>
             </div>
           ))}
