@@ -373,13 +373,14 @@ function AdminLayout({ page, setPage }) {
   const { supabase } = useAuth();
   const isMobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navItems = [["orders", "Bestellungen"], ["weekly", "Wochenmenüs"], ["menus", "Menü-Pool"], ["users", "Benutzer"]];
-  const adminPages = {
-    orders: <AdminOrders />,
-    users: <AdminUsers />,
-    menus: <AdminMenus />,
-    weekly: <AdminWeeklyMenus />,
-  };
+const navItems = [["orders", "Bestellungen"], ["bestellen", "Bestellen"], ["weekly", "Wochenmenüs"], ["menus", "Menü-Pool"], ["users", "Benutzer"]];
+const adminPages = {
+  orders: <AdminOrders />,
+  bestellen: <OrderPage setPage={setPage} />,
+  users: <AdminUsers />,
+  menus: <AdminMenus />,
+  weekly: <AdminWeeklyMenus />,
+};
   return (
     <div style={styles.appContainer}>
       <nav style={{ ...styles.nav, background: "#1c1917" }}>
@@ -1188,7 +1189,7 @@ function AdminMenus() {
 <td style={styles.td}>
   <div style={{ display: "flex", gap: 4 }}>
     <label style={{ ...styles.btnSmall, cursor: "pointer" }}>
-      📷 Bild
+      Bild
       <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
         const file = e.target.files[0];
         if (!file) return;
