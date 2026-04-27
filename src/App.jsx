@@ -186,38 +186,44 @@ function LoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [newsletterConsent, setNewsletterConsent] = useState(false);
 
   useEffect(() => {
     supabase.from("companies").select("*").then(({ data }) => setCompanies(data || []));
   }, []);
 
   async function handleLogin(e) {
-    e.preventDefault();
-    setError(""); setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError("Falsche E-Mail oder Passwort.");
-    setLoading(false);
+  e.preventDefault();
+  setError(""); setLoading(true);
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) { setError("Falsche E-Mail oder Passwort."); setLoading(false); return; }
+  if (!rememberMe) {
+    window.addEventListener("beforeunload", () => supabase.auth.signOut());
   }
+  setLoading(false);
+}
 
-  async function handleRegister(e) {
-    e.preventDefault();
-    setError(""); setLoading(true);
-    if (!company) { setError("Bitte Firma auswählen."); setLoading(false); return; }
-    if (password !== passwordConfirm) { setError("Passwörter stimmen nicht überein."); setLoading(false); return; }
-    const { data, error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { full_name: name } }
+async function handleRegister(e) {
+  e.preventDefault();
+  setError(""); setLoading(true);
+  if (!company) { setError("Bitte Firma auswählen."); setLoading(false); return; }
+  if (!newsletterConsent) { setError("Bitte Newsletter-Einwilligung bestätigen."); setLoading(false); return; }
+  if (password !== passwordConfirm) { setError("Passwörter stimmen nicht überein."); setLoading(false); return; }
+  const { data, error } = await supabase.auth.signUp({
+    email, password,
+    options: { data: { full_name: name } }
+  });
+  if (error) { setError(error.message); setLoading(false); return; }
+  if (data.user) {
+    await supabase.from("profiles").update({ company_id: company, full_name: name, newsletter_consent: true }).eq("id", data.user.id);
+    await supabase.functions.invoke('resend-email', {
+      body: { full_name: name, email: email }
     });
-    if (error) { setError(error.message); setLoading(false); return; }
-    if (data.user) {
-      await supabase.from("profiles").update({ company_id: company, full_name: name }).eq("id", data.user.id);
-      await supabase.functions.invoke('resend-email', {
-        body: { full_name: name, email: email }
-      });
-    }
-    setSuccess("Registrierung erfolgreich! Warte auf Freigabe durch den Administrator.");
-    setLoading(false);
   }
+  setSuccess("Registrierung erfolgreich! Warte auf Freigabe durch den Administrator.");
+  setLoading(false);
+}
 
   return (
     <div style={styles.loginBg}>
@@ -239,7 +245,11 @@ function LoginPage() {
           <form onSubmit={handleLogin} style={styles.form}>
             <Input label="E-Mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
             <Input label="Passwort" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-            <button type="submit" style={styles.btnPrimary} disabled={loading}>{loading ? "…" : "Anmelden"}</button>
+            <label style={{ ...styles.checkboxLabel, marginBottom: 4 }}>
+  <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} style={styles.checkbox} />
+  <span style={{ fontSize: 14, color: "#44403c" }}>Angemeldet bleiben</span>
+</label>
+<button type="submit" style={styles.btnPrimary} disabled={loading}>{loading ? "…" : "Anmelden"}</button>
           </form>
         ) : (
           <form onSubmit={handleRegister} style={styles.form}>
@@ -273,7 +283,19 @@ function LoginPage() {
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            <button type="submit" style={styles.btnPrimary} disabled={loading}>{loading ? "…" : "Registrieren"}</button>
+            <div style={{ ...styles.optionCard, border: newsletterConsent ? "1.5px solid #15803d" : "1.5px solid #dc2626", background: newsletterConsent ? "#f0fdf4" : "#fff7f7" }}>
+  <label style={styles.checkboxLabel}>
+    <input type="checkbox" checked={newsletterConsent} onChange={e => setNewsletterConsent(e.target.checked)} style={styles.checkbox} />
+    <span>
+      <strong>Newsletter-Einwilligung *</strong><br />
+      <span style={{ fontSize: 13, color: "#44403c" }}>
+        Ich bin einverstanden, jeden Montag eine Bestellerinnerung per E-Mail zu erhalten.
+      </span>
+    </span>
+  </label>
+  {!newsletterConsent && <p style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>⚠️ Diese Bestätigung ist zwingend erforderlich.</p>}
+</div>
+<button type="submit" style={styles.btnPrimary} disabled={loading}>{loading ? "…" : "Registrieren"}</button>
             <p style={styles.hint}>Nach der Registrierung wird dein Konto durch den Administrator freigeschaltet.</p>
           </form>
         )}
@@ -291,9 +313,10 @@ function PendingApprovalPage() {
     <div style={styles.loginBg}>
       <div style={styles.loginCard}>
         <div style={{ textAlign: "center", padding: "40px 20px" }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>Ausstehend</div>
+          <div style={{ fontSize: 55, marginBottom: 16 }}>Ausstehend</div>
           <h2 style={{ color: "#b45309", marginBottom: 8 }}>Konto wird geprüft</h2>
-          <p style={{ color: "#6b7280" }}>Dein Konto wurde noch nicht freigeschaltet. Der Administrator wird dich bald freischalten.</p>
+          <p style={{ color: "#6b7280" }}>Dein Konto wurde noch nicht freigeschaltet.
+          Sobald das Konto freigeschaltet ist erhalten Sie eine Bestätigungsmail.</p>
           <button style={{ ...styles.btnSecondary, marginTop: 24 }} onClick={() => supabase.auth.signOut()}>Abmelden</button>
         </div>
       </div>
@@ -1358,10 +1381,20 @@ function AdminUsers() {
     });
   }, []);
 
-  async function toggleApproval(userId, current) {
-    await supabase.from("profiles").update({ is_approved: !current }).eq("id", userId);
-    setUsers(users.map(u => u.id === userId ? { ...u, is_approved: !current } : u));
+async function toggleApproval(userId, current) {
+  await supabase.from("profiles").update({ is_approved: !current }).eq("id", userId);
+  setUsers(users.map(u => u.id === userId ? { ...u, is_approved: !current } : u));
+
+  // Bestätigungsmail senden wenn User freigeschaltet wird
+  if (!current) {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      await supabase.functions.invoke('send-approval', {
+        body: { full_name: user.full_name, email: user.email }
+      });
+    }
   }
+}
 
   async function toggleAdmin(userId, current) {
     await supabase.from("profiles").update({ is_admin: !current }).eq("id", userId);
