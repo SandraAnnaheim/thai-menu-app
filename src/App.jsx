@@ -956,7 +956,9 @@ function ContactOrders() {
   const [loading, setLoading] = useState(true);
   const [openWeeks, setOpenWeeks] = useState({});
 
-  useEffect(() => { loadOrders(); }, []);
+  useEffect(() => { 
+  if (profile?.companies?.name) loadOrders(); 
+}, [profile?.companies?.name]);
 
   async function loadOrders() {
     setLoading(true);
