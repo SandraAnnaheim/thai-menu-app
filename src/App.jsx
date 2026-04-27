@@ -475,7 +475,7 @@ function OrderPage({ setPage }) {
   const [loading, setLoading] = useState(true);
   const [menuChoice, setMenuChoice] = useState(null);
   const [isVegetarian, setIsVegetarian] = useState(false);
-  const [proteinChoice, setProteinChoice] = useState("poulet");
+  const [proteinChoice, setProteinChoice] = useState("");
   const [lunchbox, setLunchbox] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
